@@ -41,17 +41,25 @@ function instalar() {
   return texto;
 }
 
-/** Saca los acentos y las mayúsculas, para comparar nombres de carpeta. */
+/**
+ * Deja un nombre de carpeta comparable: sin mayúsculas, sin acentos y sin
+ * espacios ni signos.
+ *
+ * Drive guarda los acentos de dos formas distintas: "ó" puede ser un solo
+ * carácter o una "o" seguida de una tilde aparte. Hay que contemplar las dos,
+ * si no "Administración" no coincide con "Administración".
+ */
 function sinAcentos_(texto) {
+  texto = String(texto).toLowerCase();
+  texto = texto.replace(/[\u0300-\u036f]/g, '');   // tildes escritas aparte
   var de = 'áàäâãéèëêíìïîóòöôõúùüûñç';
   var a = 'aaaaaeeeeiiiiooooouuuunc';
   var salida = '';
-  texto = String(texto).toLowerCase();
   for (var i = 0; i < texto.length; i++) {
     var p = de.indexOf(texto.charAt(i));
     salida += (p >= 0) ? a.charAt(p) : texto.charAt(i);
   }
-  return salida.trim();
+  return salida.replace(/[^a-z0-9]/g, '');          // espacios, puntos, guiones
 }
 
 /** Busca una subcarpeta por nombre, perdonando acentos y mayúsculas. */
