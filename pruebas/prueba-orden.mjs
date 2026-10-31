@@ -298,6 +298,46 @@ titulo('11. Vaciar los registros deja la planilla en cero');
     campo.entorno.contexto.leerHoja_('Potreros').length + ' potreros');
 }
 
+titulo('12. Una planilla con los encabezados viejos se pone al día sola');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+
+  // Dejamos la hoja como estaba antes de que existiera la columna "persona",
+  // con una fila ya cargada.
+  const viejas = ['id', 'fecha', 'mm', 'lugar', 'nota', 'cargado_en',
+    'dispositivo', 'origen_carga', 'estado'];
+  const h = ctx.hoja_('Lluvias', viejas);
+  h.clear();
+  h.getRange(1, 1, 1, viejas.length).setValues([viejas]);
+  h.appendRow(['vieja-1', '2026-09-01', 18, 'Casa', 'antes del cambio',
+    '2026-09-01T10:00:00', 'celu-viejo', 'App', 'activo']);
+
+  const antes = ctx.leerHoja_('Lluvias');
+  ok(antes.length === 1 && antes[0].persona === undefined,
+    'la hoja arranca sin la columna persona');
+
+  // Llega un registro del celular: eso solo tiene que acomodar la hoja.
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'nueva-1', hoja: 'Lluvias', fecha: '2026-10-20',
+      cargado_en: '2026-10-20T10:00:00', mm: 42, lugar: 'Manga' }
+  ] });
+
+  const despues = ctx.leerHoja_('Lluvias');
+  ok(despues.length === 2, 'quedan las dos filas: no se perdió la vieja',
+    despues.length + ' filas');
+  const vieja = despues.find(f => f.id === 'vieja-1');
+  const nueva = despues.find(f => f.id === 'nueva-1');
+  ok(vieja && Number(vieja.mm) === 18 && vieja.lugar === 'Casa' &&
+     vieja.nota === 'antes del cambio',
+    'la fila vieja conservó todos sus datos en su lugar',
+    vieja ? vieja.mm + ' mm en ' + vieja.lugar : 'no está');
+  ok(vieja && vieja.persona === '', 'con la columna nueva vacía');
+  ok(nueva && nueva.persona === 'Nahuel' && Number(nueva.mm) === 42,
+    'y la nueva entró con quién la cargó',
+    nueva ? nueva.persona + ', ' + nueva.mm + ' mm' : 'no está');
+}
+
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'
   : '✗ ' + fallas + ' prueba(s) fallaron.'));
 process.exit(fallas === 0 ? 0 : 1);

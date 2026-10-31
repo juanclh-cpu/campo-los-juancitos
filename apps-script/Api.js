@@ -11,6 +11,24 @@
 var PROP_TOKEN = 'TOKEN';
 var PROP_TOKEN_CREADO = 'TOKEN_CREADO';
 
+/**
+ * Se corre una vez por ejecución, antes de escribir: si al código se le sumó
+ * una columna y la planilla todavía no la tiene, la agrega sin perder nada.
+ * Así una versión nueva del script no necesita que nadie apriete un botón.
+ */
+var HOJAS_REVISADAS = false;
+function asegurarHojasAlDia_() {
+  if (HOJAS_REVISADAS) return;
+  HOJAS_REVISADAS = true;
+  try {
+    armarHojas_();
+    ponerHojasAlDia_();
+  } catch (e) {
+    registrarLog_('no pude poner las hojas al día', '', '', 0, 0, 0,
+      String(e && e.message ? e.message : e));
+  }
+}
+
 function tokenGuardado_() {
   return PropertiesService.getScriptProperties().getProperty(PROP_TOKEN) || '';
 }
@@ -160,6 +178,8 @@ function doPost(e) {
     if (!lock.tryLock(30000)) {
       return error_('La planilla está ocupada, probá de nuevo', 'ocupado');
     }
+
+    asegurarHojasAlDia_();
 
     var accion = texto_(cuerpo.accion) || 'guardar';
     var respuesta;

@@ -95,14 +95,14 @@ function ponerHojasAlDia_() {
     var esquema = ESQUEMA[nombre];
     var ultimaFila = h.getLastRow();
     var ultimaCol = Math.max(h.getLastColumn(), esquema.length);
-    var valores = h.getRange(1, 1, Math.max(ultimaFila, 1), ultimaCol).getValues();
-    var viejos = valores[0].map(function (v) { return texto_(v); });
 
-    var igual = viejos.length >= esquema.length && esquema.every(function (c, i) {
-      return viejos[i] === c;
-    });
+    // Con mirar el encabezado alcanza para saber si hay que hacer algo.
+    var viejos = h.getRange(1, 1, 1, ultimaCol).getValues()[0]
+      .map(function (v) { return texto_(v); });
+    var igual = esquema.every(function (c, i) { return viejos[i] === c; });
     if (igual) return;
 
+    var valores = h.getRange(1, 1, Math.max(ultimaFila, 1), ultimaCol).getValues();
     var filas = valores.slice(1).map(function (f) {
       return esquema.map(function (col) {
         var i = viejos.indexOf(col);
