@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v2';
+var VERSION = 'v3';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -1686,21 +1686,27 @@ PANTALLAS.problemas = function () {
 // 16. Arranque
 // ===========================================================================
 
-/** Baja los catálogos (una vez por día alcanza) y manda lo que esté esperando. */
+/**
+ * Baja las listas de potreros, dueños y categorías cada vez que se abre la
+ * app con señal. Son unos pocos kilobytes y así un cambio hecho en la planilla
+ * aparece en el teléfono la próxima vez que lo abren, sin esperar a mañana.
+ * Si no hay señal queda la copia guardada.
+ */
 async function arrancarDatos() {
   await contarCola();
   pintarEstado();
   if (!navigator.onLine) return;
-  var ultima = localStorage.getItem('catalogos_fecha');
-  if (!CAT || ultima !== hoyISO()) {
-    try {
-      var r = await apiGet('catalogos');
-      if (r.ok) {
-        guardarCatalogos(r.catalogos);
-        if (PILA.length && PILA[PILA.length - 1].nombre === 'inicio') pintar();
+  try {
+    var r = await apiGet('catalogos');
+    if (r.ok) {
+      var antes = JSON.stringify(CAT);
+      guardarCatalogos(r.catalogos);
+      var cambiaron = antes !== JSON.stringify(CAT);
+      if (cambiaron && PILA.length && PILA[PILA.length - 1].nombre === 'inicio') {
+        pintar();
       }
-    } catch (e) {}
-  }
+    }
+  } catch (e) {}
   sincronizar();
 }
 

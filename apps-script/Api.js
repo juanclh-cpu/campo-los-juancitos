@@ -110,14 +110,19 @@ function catalogos_() {
         uso: texto_(f.uso)
       };
     });
+  // Una fila nueva sin número de orden va al final, no al principio.
+  var orden_ = function (f) {
+    var n = aNumero_(f.orden);
+    return n > 0 ? n : 9999;
+  };
   var duenos = leerHoja_(HOJA.DUENOS)
     .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no'; })
-    .sort(function (a, b) { return aNumero_(a.orden) - aNumero_(b.orden); })
+    .sort(function (a, b) { return orden_(a) - orden_(b); })
     .map(function (f) { return texto_(f.dueno); })
     .filter(function (d) { return d; });
   var categorias = leerHoja_(HOJA.CATEGORIAS)
     .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no'; })
-    .sort(function (a, b) { return aNumero_(a.orden) - aNumero_(b.orden); })
+    .sort(function (a, b) { return orden_(a) - orden_(b); })
     .map(function (f) { return texto_(f.categoria); })
     .filter(function (c) { return c; });
 
