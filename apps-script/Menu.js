@@ -7,6 +7,8 @@ var PROP_URL_APP = 'URL_APP';
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Campo Los Juancitos')
+    .addItem('Instalar (una sola vez)', 'menuInstalar')
+    .addSeparator()
     .addItem('Recalcular stock y libretas', 'menuRecalcularRapido')
     .addItem('Recalcular todo (incluye diario de ocupación)', 'menuRecalcularTodo')
     .addSeparator()
@@ -16,6 +18,40 @@ function onOpen() {
     .addSeparator()
     .addItem('Armar o reparar las hojas', 'menuArmarHojas')
     .addToUi();
+}
+
+/**
+ * Instalación desde el menú de la planilla, para no depender del editor de
+ * Apps Script: hay cuentas de Workspace donde el editor no abre.
+ * La primera vez Google pide permiso acá mismo.
+ */
+function menuInstalar() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.alert('Instalar',
+    'Carga los potreros, los dueños y las categorías de arranque, y pisa lo que ' +
+    'haya en esas tres hojas. Después mueve la planilla a su carpeta.\n\n' +
+    'Tarda hasta un minuto. ¿Sigo?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) return;
+
+  var texto;
+  try {
+    texto = instalar();
+  } catch (e) {
+    ui.alert('No pude terminar', String(e && e.message ? e.message : e), ui.ButtonSet.OK);
+    return;
+  }
+
+  var info = enlaceActivacion_();
+  var html = '<div style="font:14px/1.6 -apple-system,Segoe UI,Roboto,sans-serif">' +
+    '<p style="white-space:pre-wrap;margin:0 0 12px">' +
+    texto.split('ENLACE DE ACTIVACIÓN:')[0].replace(/</g, '&lt;') + '</p>' +
+    '<p style="margin:0 0 6px"><b>Enlace de activación para el celular</b><br>' +
+    '<span style="color:#666">Abrilo una sola vez en el teléfono de quien va a ' +
+    'cargar. No lo mandes a grupos.</span></p>' +
+    '<textarea rows="4" style="width:100%;font:12px monospace" readonly>' +
+    (info.enlace || '(falta la dirección de la app)') + '</textarea></div>';
+  ui.showModalDialog(HtmlService.createHtmlOutput(html).setWidth(560).setHeight(380),
+    'Listo');
 }
 
 function menuRecalcularRapido() {
