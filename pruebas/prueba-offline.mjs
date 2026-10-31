@@ -74,7 +74,7 @@ async function principal() {
       i.value = n;
       [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'LISTO').click();
     }, 'Nahuel');
-    await pagina.waitForFunction(() => /HACIENDA HOY/.test(document.body.textContent));
+    await pagina.waitForFunction(() => /STOCK/.test(document.body.textContent));
     ok(true, 'la app abre en la pantalla principal, sin PIN');
     ok(await pagina.evaluate(() => CFG.persona) === 'Nahuel',
       'guardó quién carga');

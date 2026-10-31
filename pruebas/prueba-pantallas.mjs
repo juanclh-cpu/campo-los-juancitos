@@ -60,7 +60,7 @@ async function foto(pagina, nombre) {
 }
 
 async function volverAlInicio(pagina) {
-  await pagina.waitForFunction(() => /HACIENDA HOY/.test(document.body.textContent),
+  await pagina.waitForFunction(() => /STOCK/.test(document.body.textContent),
     { timeout: 10000 });
   await dormir(200);
 }
@@ -98,6 +98,7 @@ async function principal() {
   const CAT_B = buscarCat('novillo', 2);
   const CAT_CRIA = buscarCat('ternera', 4);
   const DUENO = catalogos.duenos[0];
+  const DUENO_RE = DUENO.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const navegador = await puppeteer.launch({
     executablePath: CHROME, headless: 'new',
@@ -109,7 +110,7 @@ async function principal() {
   pagina.on('pageerror', e => { console.log('  ! error en la app:', e.message); fallas++; });
 
   try {
-    console.log('\nPreparar: activar y poner el PIN');
+    console.log('\nPreparar: activar y poner el nombre');
     await pagina.goto(BASE + '/#a=' + activacion.codigo, { waitUntil: 'networkidle0' });
     await pagina.waitForFunction(() => /Cómo te llamás/.test(document.body.textContent));
     await foto(pagina, '01-nombre');
@@ -244,33 +245,54 @@ async function principal() {
       P1 + '=20, ' + P2 + '=10, ' + P4 + '=2');
 
     console.log('\n8. Pantallas de consulta');
-    await tocar(pagina, 'HACIENDA HOY', 'exacto');
+    await tocar(pagina, 'STOCK', 'exacto');
     await pagina.waitForFunction(() => /Total en el campo/.test(document.body.textContent),
       { timeout: 15000 });
-    await foto(pagina, '15-hacienda-hoy');
+    await foto(pagina, '15-stock-por-cliente');
     const totalTexto = await pagina.evaluate(() =>
       document.querySelector('.total').textContent);
-    ok(/32 cabezas/.test(totalTexto), 'Hacienda hoy muestra el stock', totalTexto);
+    ok(/32 cabezas/.test(totalTexto), 'el stock abre por cliente y da el total', totalTexto);
+    const porCliente = await pagina.evaluate(() => document.body.innerText);
+    ok(new RegExp(DUENO_RE).test(porCliente) && /Vaca\s+30/.test(porCliente),
+      'muestra cada cliente con sus categorías');
     const hayAviso = await pagina.evaluate(() => !!document.querySelector('.falta'));
     ok(!hayAviso, 'no hay potreros en negativo');
 
-    await tocar(pagina, '‹', 'exacto');
-    await tocar(pagina, 'Libretas por cliente', 'exacto');
-    await tocar(pagina, DUENO, 'exacto');
+    await tocar(pagina, 'Por potrero', 'exacto');
+    await pagina.waitForFunction(() => /Total en el campo/.test(document.body.textContent),
+      { timeout: 15000 });
+    await foto(pagina, '16-stock-por-potrero');
+    const porPotrero = await pagina.evaluate(() => document.body.innerText);
+    ok(porPotrero.indexOf(P1) >= 0 && porPotrero.indexOf(P2) >= 0,
+      'la vista por potrero sigue estando', P1 + ' y ' + P2);
+
+    await tocar(pagina, 'Por cliente', 'exacto');
+    await pagina.waitForFunction(() => /Ver dónde está/.test(document.body.textContent),
+      { timeout: 15000 });
+    await tocar(pagina, 'Ver dónde está y la libreta', 'exacto');
+    await pagina.waitForFunction(() => /Tiene \d+ cabezas/.test(document.body.textContent),
+      { timeout: 15000 });
+    await foto(pagina, '17-cliente');
+    const detalle = await pagina.evaluate(() => document.body.innerText);
+    ok(/Tiene 32 cabezas/.test(detalle), 'el detalle del cliente da el total');
+    ok(detalle.indexOf(P1) >= 0 && detalle.indexOf(P2) >= 0,
+      'y dice en qué potreros está', P1 + ', ' + P2);
+
+    await tocar(pagina, 'Ver la libreta de ' + DUENO, 'exacto');
     await pagina.waitForFunction(() => document.querySelector('table.libreta'),
       { timeout: 15000 });
-    await foto(pagina, '16-libreta');
+    await foto(pagina, '18-libreta');
     const saldos = await pagina.evaluate(() =>
       [...document.querySelectorAll('.lote')].map(e => e.textContent));
     ok(saldos.some(t => /30 cabezas/.test(t)) && saldos.some(t => /2 cabezas/.test(t)),
       'la libreta muestra el saldo por categoría', saldos.join(' · '));
 
-    await tocar(pagina, '‹', 'exacto');
-    await tocar(pagina, '‹', 'exacto');
+    await pagina.evaluate(() => alInicio());
+    await dormir(300);
     await tocar(pagina, 'Mis últimos registros', 'exacto');
     await pagina.waitForFunction(() => /Corregir/.test(document.body.textContent),
       { timeout: 10000 });
-    await foto(pagina, '17-ultimos-registros');
+    await foto(pagina, '19-ultimos-registros');
     const cuantos = await pagina.evaluate(() => document.querySelectorAll('.ficha').length);
     ok(cuantos === 6, 'los 6 registros se pueden corregir o borrar', cuantos + ' fichas');
     const conNombre = await pagina.evaluate(() =>

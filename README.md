@@ -181,7 +181,7 @@ Claves de **Configuración**:
 | Hoja | Columnas |
 |---|---|
 | **Stock** | `potrero`, `lote`, `hectareas`, `categoria`, `dueno`, `cabezas`, `desde`, `dias`, `recalculado_en` |
-| **Resumen stock** | `dueno`, `categoria`, `cabezas`, `ultimo_evento`, `recalculado_en` |
+| **Resumen stock** | `dueno`, `categoria`, `cabezas`, `potreros`, `ultimo_evento`, `recalculado_en` |
 | **Diario de ocupación** | `fecha`, `potrero`, `lote`, `hectareas`, `categoria`, `dueno`, `cabezas` |
 | **Libreta &lt;Dueño&gt;** | `Fecha`, `Categoría`, `Ingreso`, `Egreso`, `Muertes`, `Stock`, `Potrero`, `Comentarios / sanidad`, `id_registro` |
 | **Log** | `cargado_en`, `accion`, `persona`, `dispositivo`, `recibidos`, `guardados`, `repetidos`, `detalle` |

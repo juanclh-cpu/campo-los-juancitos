@@ -27,7 +27,7 @@ function escribirCalculos_(conDiario) {
   }));
 
   volcar_(HOJA.RESUMEN, ESQUEMA_REF[HOJA.RESUMEN], c.resumen.map(function (r) {
-    return [r.dueno, r.categoria, r.cabezas, r.ultimo_evento, ahora];
+    return [r.dueno, r.categoria, r.cabezas, r.potreros, r.ultimo_evento, ahora];
   }));
 
   Object.keys(c.libretas).forEach(function (dueno) {

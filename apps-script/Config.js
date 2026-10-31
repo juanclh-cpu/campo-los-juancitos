@@ -59,8 +59,8 @@ ESQUEMA_REF[HOJA.STOCK] = ['potrero', 'lote', 'hectareas', 'categoria', 'dueno',
   'cabezas', 'desde', 'dias', 'recalculado_en'];
 ESQUEMA_REF[HOJA.DIARIO] = ['fecha', 'potrero', 'lote', 'hectareas', 'categoria',
   'dueno', 'cabezas'];
-ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'ultimo_evento',
-  'recalculado_en'];
+ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'potreros',
+  'ultimo_evento', 'recalculado_en'];
 ESQUEMA_REF[HOJA.CONFIG] = ['clave', 'valor', 'qué es'];
 ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'persona', 'dispositivo',
   'recibidos', 'guardados', 'repetidos', 'detalle'];

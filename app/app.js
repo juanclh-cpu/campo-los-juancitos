@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v3';
+var VERSION = 'v4';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -587,8 +587,7 @@ PANTALLAS.inicio = function () {
       }, 'repetir'));
   }
 
-  cuerpo.push(boton('HACIENDA HOY', function () { ir('hacienda'); }, 'ancho'));
-  cuerpo.push(boton('Libretas por cliente', function () { ir('libretas'); }, 'secundario'));
+  cuerpo.push(boton('STOCK', function () { ir('stock'); }, 'ancho'));
   cuerpo.push(boton('Mis últimos registros', function () { ir('ultimos'); }, 'secundario'));
 
   cuerpo.push(boton('Carga: ' + (CFG.persona || 'sin nombre') + ' — cambiar',
@@ -1340,29 +1339,95 @@ function leerCache(clave) {
   try { return JSON.parse(localStorage.getItem(clave) || 'null'); } catch (e) { return null; }
 }
 
-PANTALLAS.hacienda = function (datos) {
+/**
+ * Stock. Se entra por cliente, que es como se piensa la hacienda de terceros,
+ * y con un toque se pasa a la vista por potrero, que es la que sirve para
+ * salir a buscar los animales al campo. Los dos salen del mismo cálculo.
+ */
+PANTALLAS.stock = function (datos) {
+  var vista = datos.vista || 'cliente';
   var cuerpo = [];
-  var cache = leerCache('stock');
   var cont = el('div');
+  var cache = leerCache('stock');
 
-  function pintarStock(lista, cuando, enVivo) {
+  var selector = el('div', 'opciones');
+  [['cliente', 'Por cliente'], ['potrero', 'Por potrero']].forEach(function (o) {
+    var b = boton(o[1], function () { reemplazar('stock', {vista: o[0]}); });
+    if (vista === o[0]) b.className = 'elegido';
+    selector.appendChild(b);
+  });
+  cuerpo.push(selector);
+  cuerpo.push(cont);
+
+  function pintarTodo(lista, cuando, enVivo) {
     cont.innerHTML = '';
     if (!enVivo) {
-      cont.appendChild(el('div', 'estado espera',
-        cuando ? 'Sin señal. Esto es de ' + fechaEnPalabras(cuando.slice(0, 10)) +
-          ' a las ' + cuando.slice(11, 16) : 'Sin señal y todavía no bajé los datos'));
+      cont.appendChild(el('div', 'estado espera', cuando
+        ? 'Sin señal. Esto es de ' + fechaEnPalabras(cuando.slice(0, 10)) +
+          ' a las ' + cuando.slice(11, 16)
+        : 'Sin señal y todavía no bajé los datos'));
     }
     if (!lista || !lista.length) {
       cont.appendChild(el('p', 'vacio-aviso', 'Todavía no hay hacienda anotada.'));
       return;
     }
+    if (vista === 'cliente') pintarPorCliente(lista);
+    else pintarPorPotrero(lista);
+
+    var total = lista.reduce(function (a, s) { return a + s.cabezas; }, 0);
+    cont.appendChild(el('div', 'total', 'Total en el campo: ' + total + ' cabezas'));
+    avisarNegativos(lista);
+    if (vista === 'cliente') {
+      cont.appendChild(boton('Ver la libreta de otro cliente',
+        function () { ir('libretas'); }, 'secundario'));
+    }
+  }
+
+  function pintarPorCliente(lista) {
+    var porDueno = {};
+    var orden = [];
+    lista.forEach(function (s) {
+      if (!porDueno[s.dueno]) { porDueno[s.dueno] = []; orden.push(s.dueno); }
+      porDueno[s.dueno].push(s);
+    });
+    orden.sort();
+    orden.forEach(function (dueno) {
+      var filas = porDueno[dueno];
+      var total = filas.reduce(function (a, s) { return a + s.cabezas; }, 0);
+
+      var tarjeta = el('div', 'grupo-potrero');
+      var cab = el('div', 'linea');
+      cab.style.borderTop = 'none';
+      cab.style.marginTop = '0';
+      cab.style.paddingTop = '0';
+      cab.appendChild(el('h3', null, dueno));
+      cab.appendChild(el('b', null, total + ' cab.'));
+      tarjeta.appendChild(cab);
+
+      var porCategoria = {};
+      filas.forEach(function (s) {
+        porCategoria[s.categoria] = (porCategoria[s.categoria] || 0) + s.cabezas;
+      });
+      Object.keys(porCategoria).sort().forEach(function (cat) {
+        var linea = el('div', 'linea');
+        linea.appendChild(el('span', null, cat));
+        linea.appendChild(el('b', null, String(porCategoria[cat])));
+        tarjeta.appendChild(linea);
+      });
+
+      tarjeta.appendChild(boton('Ver dónde está y la libreta',
+        function () { ir('cliente', {dueno: dueno}); }, 'secundario'));
+      cont.appendChild(tarjeta);
+    });
+  }
+
+  function pintarPorPotrero(lista) {
     var porPotrero = {};
     var orden = [];
     lista.forEach(function (s) {
       if (!porPotrero[s.potrero]) { porPotrero[s.potrero] = []; orden.push(s.potrero); }
       porPotrero[s.potrero].push(s);
     });
-    var total = 0;
     orden.forEach(function (potrero) {
       var grupo = el('div', 'grupo-potrero');
       var p = datosPotrero(potrero);
@@ -1376,7 +1441,6 @@ PANTALLAS.hacienda = function (datos) {
       }
       if (sub.length) grupo.appendChild(el('div', 'sub', sub.join(' · ')));
       porPotrero[potrero].forEach(function (s) {
-        total += s.cabezas;
         var linea = el('div', 'linea');
         linea.appendChild(el('span', null, s.categoria + ' · ' + s.dueno));
         linea.appendChild(el('b', null, String(s.cabezas)));
@@ -1384,20 +1448,19 @@ PANTALLAS.hacienda = function (datos) {
       });
       cont.appendChild(grupo);
     });
-    cont.appendChild(el('div', 'total', 'Total en el campo: ' + total + ' cabezas'));
-    var enRojo = lista.filter(function (s) { return s.cabezas < 0; });
-    if (enRojo.length) {
-      cont.appendChild(el('div', 'falta',
-        'Hay potreros con número negativo (' +
-        enRojo.map(function (s) { return s.potrero; }).join(', ') +
-        '). Quiere decir que se sacó hacienda de ahí sin haberla contado antes. ' +
-        'Contá ese potrero con el botón Contar y se arregla.'));
-    }
   }
 
-  cuerpo.push(nodoEstado());
-  cuerpo.push(cont);
-  pintarStock(cache ? cache.datos : null, cache ? cache.cuando : null, false);
+  function avisarNegativos(lista) {
+    var enRojo = lista.filter(function (s) { return s.cabezas < 0; });
+    if (!enRojo.length) return;
+    cont.appendChild(el('div', 'falta',
+      'Hay potreros con número negativo (' +
+      enRojo.map(function (s) { return s.potrero; }).join(', ') +
+      '). Quiere decir que se sacó hacienda de ahí sin haberla contado antes. ' +
+      'Contá ese potrero con el botón Contar y se arregla.'));
+  }
+
+  pintarTodo(cache ? cache.datos : null, cache ? cache.cuando : null, false);
 
   if (navigator.onLine) {
     cont.innerHTML = '';
@@ -1405,12 +1468,65 @@ PANTALLAS.hacienda = function (datos) {
     apiGet('stock').then(function (r) {
       if (!r.ok) throw new Error(r.error || 'error');
       guardarCache('stock', r.stock);
-      pintarStock(r.stock, ahoraISO(), true);
+      pintarTodo(r.stock, ahoraISO(), true);
     }).catch(function () {
-      pintarStock(cache ? cache.datos : null, cache ? cache.cuando : null, false);
+      pintarTodo(cache ? cache.datos : null, cache ? cache.cuando : null, false);
     });
   }
-  return marco('Hacienda hoy', cuerpo);
+  return marco('Stock', cuerpo);
+};
+
+/** Un cliente: cuánto tiene de cada categoría y en qué potrero está. */
+PANTALLAS.cliente = function (datos) {
+  var cuerpo = [];
+  var cache = leerCache('stock');
+  var lista = (cache && cache.datos ? cache.datos : [])
+    .filter(function (s) { return s.dueno === datos.dueno; });
+
+  if (!lista.length) {
+    cuerpo.push(el('p', 'vacio-aviso',
+      'Este cliente no tiene hacienda anotada en el campo.'));
+  } else {
+    var total = lista.reduce(function (a, s) { return a + s.cabezas; }, 0);
+    cuerpo.push(el('div', 'total', 'Tiene ' + total + ' cabezas en el campo'));
+
+    var porCategoria = {};
+    var orden = [];
+    lista.forEach(function (s) {
+      if (!porCategoria[s.categoria]) { porCategoria[s.categoria] = []; orden.push(s.categoria); }
+      porCategoria[s.categoria].push(s);
+    });
+    orden.sort();
+    orden.forEach(function (cat) {
+      var filas = porCategoria[cat];
+      var suma = filas.reduce(function (a, s) { return a + s.cabezas; }, 0);
+      var tarjeta = el('div', 'grupo-potrero');
+      var cab = el('div', 'linea');
+      cab.style.borderTop = 'none';
+      cab.style.marginTop = '0';
+      cab.style.paddingTop = '0';
+      cab.appendChild(el('h3', null, cat));
+      cab.appendChild(el('b', null, suma + ' cab.'));
+      tarjeta.appendChild(cab);
+      filas.forEach(function (s) {
+        var linea = el('div', 'linea');
+        var donde = s.potrero;
+        var p = datosPotrero(s.potrero);
+        if (p && p.hectareas) donde += ' · ' + numeroLindo(p.hectareas) + ' ha';
+        if (s.dias !== '' && s.dias !== undefined && s.dias !== null) {
+          donde += ' · hace ' + s.dias + (s.dias === 1 ? ' día' : ' días');
+        }
+        linea.appendChild(el('span', null, donde));
+        linea.appendChild(el('b', null, String(s.cabezas)));
+        tarjeta.appendChild(linea);
+      });
+      cuerpo.push(tarjeta);
+    });
+  }
+
+  cuerpo.push(boton('Ver la libreta de ' + datos.dueno,
+    function () { ir('libreta', {dueno: datos.dueno}); }, 'ancho'));
+  return marco(datos.dueno, cuerpo);
 };
 
 // ===========================================================================
@@ -1419,6 +1535,8 @@ PANTALLAS.hacienda = function (datos) {
 
 PANTALLAS.libretas = function () {
   var cuerpo = [el('p', 'pregunta', '¿De qué cliente?')];
+  cuerpo.push(el('p', null,
+    'Están todos, incluso los que hoy no tienen hacienda en el campo.'));
   var cont = el('div', 'opciones una');
   var lista = catDuenos();
   var cache = leerCache('libretaDuenos');

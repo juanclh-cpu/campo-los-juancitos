@@ -256,8 +256,17 @@ function calcularTodo_(conDiario) {
     if (vistos[kk]) return;
     vistos[kk] = true;
     var cab = total_(g.categoria, g.dueno);
+    var donde = [];
+    Object.keys(stock).forEach(function (k2) {
+      var o = stock[k2];
+      if (o.categoria === g.categoria && o.dueno === g.dueno && o.cabezas !== 0) {
+        donde.push(o.potrero + ': ' + o.cabezas);
+      }
+    });
+    donde.sort();
     resumen.push({
       dueno: g.dueno, categoria: g.categoria, cabezas: cab,
+      potreros: donde.join(' · '),
       ultimo_evento: ultimoEvento[kk] || ''
     });
   });
