@@ -1,0 +1,16 @@
+# El listado de potreros y los nombres de los clientes no se publican:
+# viven en la planilla, que es privada. Hay un ejemplo en Semilla.ejemplo.js.
+apps-script/Semilla.js
+
+# Capturas y guía: salen del campo de verdad, así que quedan afuera del repo.
+docs/capturas/
+docs/guia-nahuel.*
+
+# clasp y credenciales
+.clasp.json
+apps-script/.clasp.json
+.clasprc.json
+
+node_modules/
+.DS_Store
+pruebas/salida/
