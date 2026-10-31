@@ -13,6 +13,7 @@
 function instalar() {
   var lineas = [];
   lineas.push(sembrarCatalogos());
+  ponerHojasAlDia_();
   lineas.push(moverPlanilla_());
 
   if (typeof URL_DE_LA_APP === 'string' && URL_DE_LA_APP) {
@@ -24,11 +25,18 @@ function instalar() {
 
   try {
     crearDisparadorDiario();
+    crearDisparadorInactividad();
     lineas.push('Recálculo automático: todas las noches a las 22.');
+    lineas.push('Aviso por inactividad: todas las mañanas a las 9.');
   } catch (e) {
-    lineas.push('Sin recálculo automático (falta el permiso de disparadores): ' +
+    lineas.push('Sin tareas automáticas (falta el permiso de disparadores): ' +
       'usá el menú para recalcular.');
   }
+
+  var avisos = mailsDe_('mail_avisos');
+  lineas.push(avisos.length
+    ? 'Los avisos van a: ' + avisos.join(', ')
+    : 'Falta completar "mail_avisos" en la hoja Configuración.');
 
   escribirCalculos_(true);
 
@@ -39,6 +47,20 @@ function instalar() {
   var texto = lineas.join('\n');
   Logger.log(texto);
   return texto;
+}
+
+/** Pone un valor en la hoja Configuración sólo si está vacío. */
+function completarConfig_(clave, valor) {
+  if (!valor) return;
+  var h = hoja_(HOJA.CONFIG, ESQUEMA_REF[HOJA.CONFIG]);
+  var filas = leerHoja_(HOJA.CONFIG);
+  for (var i = 0; i < filas.length; i++) {
+    if (texto_(filas[i].clave) === clave) {
+      if (!texto_(filas[i].valor)) h.getRange(filas[i]._fila, 2).setValue(valor);
+      return;
+    }
+  }
+  h.appendRow([clave, valor, '']);
 }
 
 /**

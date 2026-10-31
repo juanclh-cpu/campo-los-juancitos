@@ -56,9 +56,10 @@ function escribirCalculos_(conDiario) {
 function armarHojas_() {
   Object.keys(ESQUEMA).forEach(function (n) { hoja_(n, ESQUEMA[n]); });
   [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.STOCK, HOJA.DIARIO,
-    HOJA.RESUMEN, HOJA.LOG].forEach(function (n) {
+    HOJA.RESUMEN, HOJA.CONFIG, HOJA.LOG].forEach(function (n) {
     hoja_(n, ESQUEMA_REF[n]);
   });
+  sembrarConfiguracion_();
   var libro = ss_();
   var h1 = libro.getSheetByName('Hoja 1') || libro.getSheetByName('Sheet1') ||
     libro.getSheetByName('Hoja1');
@@ -66,6 +67,91 @@ function armarHojas_() {
     libro.deleteSheet(h1);
   }
   return true;
+}
+
+/** Carga las filas de Configuración que falten, sin pisar las que ya están. */
+function sembrarConfiguracion_() {
+  var h = hoja_(HOJA.CONFIG, ESQUEMA_REF[HOJA.CONFIG]);
+  var existentes = {};
+  leerHoja_(HOJA.CONFIG).forEach(function (f) { existentes[texto_(f.clave)] = true; });
+  CONFIG_POR_DEFECTO.forEach(function (fila) {
+    if (!existentes[fila[0]]) h.appendRow(fila);
+  });
+  // Los mails de arranque viven en Semilla.js, que no se publica.
+  completarConfig_('mail_avisos',
+    typeof MAIL_AVISOS !== 'undefined' ? MAIL_AVISOS : '');
+  completarConfig_('mail_encargado',
+    typeof MAIL_ENCARGADO !== 'undefined' ? MAIL_ENCARGADO : '');
+}
+
+/**
+ * Pone los encabezados al día sin perder lo cargado: si al esquema se le
+ * sumó una columna, la agrega y acomoda los datos por nombre de columna.
+ */
+function ponerHojasAlDia_() {
+  var cambiadas = [];
+  Object.keys(ESQUEMA).forEach(function (nombre) {
+    var h = hoja_(nombre, ESQUEMA[nombre]);
+    var esquema = ESQUEMA[nombre];
+    var ultimaFila = h.getLastRow();
+    var ultimaCol = Math.max(h.getLastColumn(), esquema.length);
+    var valores = h.getRange(1, 1, Math.max(ultimaFila, 1), ultimaCol).getValues();
+    var viejos = valores[0].map(function (v) { return texto_(v); });
+
+    var igual = viejos.length >= esquema.length && esquema.every(function (c, i) {
+      return viejos[i] === c;
+    });
+    if (igual) return;
+
+    var filas = valores.slice(1).map(function (f) {
+      return esquema.map(function (col) {
+        var i = viejos.indexOf(col);
+        return (i >= 0 && f[i] !== undefined && f[i] !== null) ? f[i] : '';
+      });
+    }).filter(function (f) {
+      return f.some(function (v) { return v !== '' && v !== null; });
+    });
+
+    h.clear();
+    h.getRange(1, 1, 1, esquema.length).setValues([esquema]);
+    h.getRange(1, 1, 1, esquema.length).setFontWeight('bold');
+    h.setFrozenRows(1);
+    if (filas.length) {
+      h.getRange(2, 1, filas.length, esquema.length).setValues(filas);
+    }
+    cambiadas.push(nombre + ' (' + filas.length + ')');
+  });
+  return cambiadas;
+}
+
+/**
+ * Borra TODOS los registros y deja las hojas con los encabezados al día.
+ * No toca los potreros, los dueños, las categorías ni la configuración.
+ */
+function vaciarRegistros_() {
+  var borradas = 0;
+  Object.keys(ESQUEMA).forEach(function (nombre) {
+    var h = hoja_(nombre, ESQUEMA[nombre]);
+    if (h.getLastRow() > 1) borradas += h.getLastRow() - 1;
+    h.clear();
+    h.getRange(1, 1, 1, ESQUEMA[nombre].length).setValues([ESQUEMA[nombre]]);
+    h.getRange(1, 1, 1, ESQUEMA[nombre].length).setFontWeight('bold');
+    h.setFrozenRows(1);
+  });
+
+  // Las libretas se vuelven a armar solas; las viejas se van.
+  var libro = ss_();
+  libro.getSheets().forEach(function (h) {
+    if (h.getName().indexOf(PREFIJO_LIBRETA) === 0) libro.deleteSheet(h);
+  });
+
+  var hLog = hoja_(HOJA.LOG, ESQUEMA_REF[HOJA.LOG]);
+  if (hLog.getLastRow() > 1) {
+    hLog.getRange(2, 1, hLog.getLastRow() - 1, hLog.getLastColumn()).clearContent();
+  }
+
+  escribirCalculos_(true);
+  return borradas;
 }
 
 /** Recalcula stock y libretas (rápido). */

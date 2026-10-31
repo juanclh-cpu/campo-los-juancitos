@@ -80,6 +80,7 @@ class Hoja {
 class Libro {
   constructor() { this.hojas = []; }
   getId() { return 'planilla-de-prueba'; }
+  getUrl() { return 'https://docs.google.com/spreadsheets/d/planilla-de-prueba/edit'; }
   getSheetByName(n) { return this.hojas.find(h => h.nombre === n) || null; }
   insertSheet(n) { const h = new Hoja(n); this.hojas.push(h); return h; }
   getSheets() { return this.hojas; }
@@ -112,6 +113,7 @@ export function crearEntorno() {
   const libro = new Libro();
   const propiedades = new Map();
   const archivosDrive = [];
+  const mails = [];
 
   const contexto = {
     console,
@@ -163,7 +165,10 @@ export function crearEntorno() {
       }),
       deleteTrigger: () => {}
     },
-    HtmlService: { createHtmlOutput: () => ({ setWidth: () => ({ setHeight: () => ({}) }) }) }
+    HtmlService: { createHtmlOutput: () => ({ setWidth: () => ({ setHeight: () => ({}) }) }) },
+    MailApp: {
+      sendEmail: (para, asunto, cuerpo) => { mails.push({ para, asunto, cuerpo }); }
+    }
   };
 
   function carpetaFalsa(nombre) {
@@ -180,10 +185,11 @@ export function crearEntorno() {
 
   vm.createContext(contexto);
   const dir = path.resolve('apps-script');
-  ['Config.js', 'Stock.js', 'Escritura.js', 'Api.js', 'Menu.js', 'Instalar.js', 'Semilla.js']
+  ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Api.js', 'Menu.js',
+    'Instalar.js', 'Semilla.js']
     .forEach(f => {
       vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), contexto, { filename: f });
     });
 
-  return { contexto, libro, propiedades, archivosDrive };
+  return { contexto, libro, propiedades, archivosDrive, mails };
 }

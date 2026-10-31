@@ -69,19 +69,11 @@ function boton(texto, alApretar, clase) {
   return b;
 }
 
-async function sha256(texto) {
-  if (!(window.crypto && crypto.subtle)) return 'plano:' + texto;
-  var datos = new TextEncoder().encode(texto);
-  var hash = await crypto.subtle.digest('SHA-256', datos);
-  return Array.from(new Uint8Array(hash))
-    .map(function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-}
-
 // ===========================================================================
 // 2. Configuración guardada en el celular
 // ===========================================================================
 
-var CFG = {api: '', token: '', dispositivo: '', pinHash: '', desbloqueado: 0};
+var CFG = {api: '', token: '', dispositivo: '', persona: ''};
 var PREFS = {};
 var CAT = null;
 
@@ -128,6 +120,14 @@ function datosPotrero(id) {
   var lista = (CAT && CAT.potreros) ? CAT.potreros : [];
   for (var i = 0; i < lista.length; i++) if (lista[i].id === id) return lista[i];
   return null;
+}
+
+/** Días desde el último registro cargado en este celular. null si nunca. */
+function diasSinCargar() {
+  if (!PREFS.ultimoRegistro) return null;
+  var d = new Date(PREFS.ultimoRegistro + 'T12:00:00');
+  var hoy = new Date(hoyISO() + 'T12:00:00');
+  return Math.round((hoy - d) / 86400000);
 }
 
 function recordarPotrero(id) {
@@ -212,6 +212,7 @@ async function apiGet(accion, extra) {
 async function apiPost(cuerpo) {
   cuerpo.token = CFG.token;
   cuerpo.dispositivo = CFG.dispositivo;
+  cuerpo.persona = CFG.persona;
   // Sin encabezados propios: así el navegador no pide permiso extra al servidor.
   var r = await fetch(CFG.api, {
     method: 'POST',
@@ -239,8 +240,11 @@ async function contarCola() {
 /** Pone un registro en la cola y dispara el envío. */
 async function encolarGuardar(registro) {
   registro.cargado_en = registro.cargado_en || ahoraISO();
+  registro.persona = registro.persona || CFG.persona;
   registro.dispositivo = CFG.dispositivo;
   registro.origen_carga = 'App';
+  PREFS.ultimoRegistro = hoyISO();
+  guardarPrefs();
   await guardarEnCola({
     id: registro.id, op: 'guardar', tipo: registro.hoja,
     registro: registro, creado: new Date().toISOString(), error: ''
@@ -482,90 +486,44 @@ PANTALLAS.activar = function (datos) {
     CFG.api = info.u;
     CFG.token = info.t;
     guardarCfg();
-    ir('crearPin', {primera: true});
+    ir('nombre', {primera: true});
   }, 'ancho'));
   return marco('Activar', cuerpo, {sinVolver: true});
 };
 
-/** Teclado de 4 dígitos, para crear el PIN y para desbloquear. */
-function tecladoPin(opciones) {
-  var valor = '';
-  var cont = el('div');
-  var visor = el('div', 'visor vacio', '• • • •');
-  cont.appendChild(visor);
-  if (opciones.aviso) cont.insertBefore(el('div', 'falta', opciones.aviso), visor);
-
-  function repintar() {
-    var puntos = [];
-    for (var i = 0; i < 4; i++) puntos.push(i < valor.length ? '●' : '•');
-    visor.textContent = puntos.join(' ');
-    visor.className = valor.length ? 'visor' : 'visor vacio';
-  }
-
-  var teclado = el('div', 'teclado');
-  ['1', '2', '3', '4', '5', '6', '7', '8', '9'].forEach(function (d) {
-    teclado.appendChild(boton(d, function () {
-      if (valor.length < 4) { valor += d; repintar(); }
-      if (valor.length === 4) setTimeout(function () { opciones.alCompletar(valor); }, 120);
-    }));
-  });
-  teclado.appendChild(boton('←', function () {
-    valor = valor.slice(0, -1);
-    repintar();
-  }));
-  teclado.appendChild(boton('0', function () {
-    if (valor.length < 4) { valor += '0'; repintar(); }
-    if (valor.length === 4) setTimeout(function () { opciones.alCompletar(valor); }, 120);
-  }));
-  teclado.appendChild(el('div'));
-  cont.appendChild(teclado);
-  return cont;
-}
-
-PANTALLAS.crearPin = function (datos) {
-  var primerIntento = datos.pin || '';
+/**
+ * Quién carga. Va en cada registro, así se sabe quién anotó qué.
+ * Se pregunta una vez y se puede cambiar desde la pantalla principal.
+ */
+PANTALLAS.nombre = function (datos) {
   var cuerpo = [];
-  cuerpo.push(el('p', 'pregunta', primerIntento
-    ? 'Repetí los 4 números'
-    : 'Elegí 4 números para abrir la app'));
-  if (!primerIntento) {
-    cuerpo.push(el('p', null, 'Algo fácil de acordarse. Se usa una vez por día.'));
-  }
-  cuerpo.push(tecladoPin({
-    aviso: datos.aviso,
-    alCompletar: async function (pin) {
-      if (!primerIntento) return reemplazar('crearPin', {pin: pin});
-      if (pin !== primerIntento) {
-        return reemplazar('crearPin', {aviso: 'No coincidieron. Probá de nuevo.'});
-      }
-      CFG.pinHash = await sha256(pin);
-      CFG.desbloqueado = Date.now();
-      guardarCfg();
+  if (datos.aviso) cuerpo.push(el('div', 'falta', datos.aviso));
+  cuerpo.push(el('p', 'pregunta', '¿Cómo te llamás?'));
+  cuerpo.push(el('p', null,
+    'Va en cada cosa que cargues, para saber quién la anotó.'));
+  var entrada = el('input');
+  entrada.type = 'text';
+  entrada.value = CFG.persona || '';
+  entrada.placeholder = 'Tu nombre';
+  entrada.autocapitalize = 'words';
+  cuerpo.push(entrada);
+  cuerpo.push(boton('LISTO', async function () {
+    var nombre = entrada.value.trim();
+    if (!nombre) {
+      return reemplazar('nombre', Object.assign({}, datos,
+        {aviso: 'Escribí tu nombre para seguir.'}));
+    }
+    CFG.persona = nombre;
+    guardarCfg();
+    if (datos.primera) {
       PILA = [{nombre: 'inicio', datos: {}}];
       await arrancarDatos();
       pintar();
+    } else {
+      volver();
     }
-  }));
-  return marco('Tu clave', cuerpo, {sinVolver: true});
-};
-
-PANTALLAS.pin = function (datos) {
-  var cuerpo = [el('p', 'pregunta', 'Poné tus 4 números')];
-  cuerpo.push(tecladoPin({
-    aviso: datos.aviso,
-    alCompletar: async function (pin) {
-      var h = await sha256(pin);
-      if (h !== CFG.pinHash) {
-        return reemplazar('pin', {aviso: 'No es esa. Probá de nuevo.'});
-      }
-      CFG.desbloqueado = Date.now();
-      guardarCfg();
-      PILA = [{nombre: 'inicio', datos: {}}];
-      await arrancarDatos();
-      pintar();
-    }
-  }));
-  return marco('Campo', cuerpo, {sinVolver: true});
+  }, 'ancho'));
+  return marco('Tu nombre', cuerpo, {sinVolver: !!datos.primera});
 };
 
 // ===========================================================================
@@ -588,6 +546,13 @@ PANTALLAS.inicio = function () {
   if (!CAT) {
     cuerpo.push(el('div', 'falta',
       'Falta bajar la lista de potreros. Buscá un lugar con señal y abrí la app otra vez.'));
+  }
+
+  var sinCargar = diasSinCargar();
+  var limite = (CAT && CAT.dias_sin_registrar) || 5;
+  if (sinCargar !== null && sinCargar >= limite) {
+    cuerpo.push(el('div', 'falta', 'Hace ' + sinCargar + ' días que no cargás nada. ' +
+      'Si quedó algo sin anotar, cargalo ahora: podés poner la fecha de atrás.'));
   }
 
   var menu = el('div', 'menu');
@@ -622,8 +587,9 @@ PANTALLAS.inicio = function () {
   cuerpo.push(boton('Libretas por cliente', function () { ir('libretas'); }, 'secundario'));
   cuerpo.push(boton('Mis últimos registros', function () { ir('ultimos'); }, 'secundario'));
 
-  var pie = el('p', 'pie', 'Campo · ' + fechaEnPalabras(hoyISO()));
-  cuerpo.push(pie);
+  cuerpo.push(boton('Carga: ' + (CFG.persona || 'sin nombre') + ' — cambiar',
+    function () { ir('nombre', {}); }, 'secundario'));
+  cuerpo.push(el('p', 'pie', 'Campo · ' + fechaEnPalabras(hoyISO())));
   return marco('Campo', cuerpo, {sinVolver: true});
 };
 
@@ -1620,7 +1586,9 @@ PANTALLAS.ultimos = function () {
       var ficha = el('div', 'ficha' + (it.estado === 'guardado' ? '' : ' ' + it.estado));
       var cuando = (it.cuando || '').slice(11, 16);
       ficha.appendChild(el('div', 'cuando',
-        fechaEnPalabras(it.registro.fecha) + (cuando ? ' · cargado ' + cuando : '') +
+        fechaEnPalabras(it.registro.fecha) +
+        (it.registro.persona ? ' · ' + it.registro.persona : '') +
+        (cuando ? ' · ' + cuando : '') +
         (it.estado === 'pendiente' ? ' · esperando señal' : '') +
         (it.estado === 'mal' ? ' · ' + it.mensaje : '')));
       ficha.appendChild(el('div', 'que', resumenRegistro(it.tipo, it.registro)));
@@ -1756,13 +1724,7 @@ async function arrancar() {
   }
 
   if (!CFG.api || !CFG.token) { PILA = [{nombre: 'activar', datos: {}}]; return pintar(); }
-  if (!CFG.pinHash) { PILA = [{nombre: 'crearPin', datos: {}}]; return pintar(); }
-
-  var doceHoras = 12 * 3600 * 1000;
-  if (!CFG.desbloqueado || Date.now() - CFG.desbloqueado > doceHoras) {
-    PILA = [{nombre: 'pin', datos: {}}];
-    return pintar();
-  }
+  if (!CFG.persona) { PILA = [{nombre: 'nombre', datos: {primera: true}}]; return pintar(); }
 
   PILA = [{nombre: 'inicio', datos: {}}];
   pintar();

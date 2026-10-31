@@ -65,21 +65,19 @@ async function principal() {
   try {
     titulo('1. Activar la app con el código y poner el PIN');
     await pagina.goto(BASE + '/#a=' + activacion.codigo, { waitUntil: 'networkidle0' });
-    await pagina.waitForFunction(() => /Elegí 4 números/.test(document.body.textContent));
+    await pagina.waitForFunction(() => /Cómo te llamás/.test(document.body.textContent));
     const hash = await pagina.evaluate(() => location.hash);
     ok(hash === '', 'el código no queda en la barra de direcciones',
       hash || '(vacío)');
-    for (const vuelta of [1, 2]) {
-      for (const d of ['1', '2', '3', '4']) {
-        await pagina.evaluate(t => {
-          [...document.querySelectorAll('button')].find(b => b.textContent.trim() === t).click();
-        }, d);
-        await dormir(60);
-      }
-      await dormir(250);
-    }
+    await pagina.evaluate(n => {
+      const i = document.querySelector('input[type="text"]');
+      i.value = n;
+      [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'LISTO').click();
+    }, 'Nahuel');
     await pagina.waitForFunction(() => /HACIENDA HOY/.test(document.body.textContent));
-    ok(true, 'la app abre en la pantalla principal');
+    ok(true, 'la app abre en la pantalla principal, sin PIN');
+    ok(await pagina.evaluate(() => CFG.persona) === 'Nahuel',
+      'guardó quién carga');
 
     await esperar(() => pagina.evaluate(() => !!(window.CAT && CAT.potreros.length)),
       'que baje la lista de potreros');

@@ -8,15 +8,19 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Campo Los Juancitos')
     .addItem('Instalar (una sola vez)', 'menuInstalar')
+    .addItem('Poner las hojas al día', 'menuPonerAlDia')
     .addSeparator()
     .addItem('Recalcular stock y libretas', 'menuRecalcularRapido')
     .addItem('Recalcular todo (incluye diario de ocupación)', 'menuRecalcularTodo')
+    .addSeparator()
+    .addItem('Probar los avisos por mail', 'menuProbarAviso')
     .addSeparator()
     .addItem('Ver el código de activación', 'menuVerCodigo')
     .addItem('Generar un código nuevo (anula el anterior)', 'menuNuevoCodigo')
     .addItem('Cambiar la dirección de la app', 'menuCambiarUrlApp')
     .addSeparator()
     .addItem('Armar o reparar las hojas', 'menuArmarHojas')
+    .addItem('Vaciar todos los registros', 'menuVaciar')
     .addToUi();
 }
 
@@ -69,6 +73,68 @@ function menuArmarHojas() {
   SpreadsheetApp.getUi().alert('Hojas listas.');
 }
 
+/** Agrega las columnas nuevas sin perder lo que ya está cargado. */
+function menuPonerAlDia() {
+  var ui = SpreadsheetApp.getUi();
+  armarHojas_();
+  var cambiadas = ponerHojasAlDia_();
+  try {
+    crearDisparadorDiario();
+    crearDisparadorInactividad();
+  } catch (e) {}
+  escribirCalculos_(true);
+  ui.alert('Listo', cambiadas.length
+    ? 'Puse al día estas hojas (entre paréntesis, las filas que se conservaron):\n\n' +
+      cambiadas.join('\n') +
+      '\n\nAcordate de completar los mails en la hoja Configuración.'
+    : 'Ya estaba todo al día.', ui.ButtonSet.OK);
+}
+
+/** Borra todos los registros. Pide escribir BORRAR para confirmar. */
+function menuVaciar() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt('Vaciar todos los registros',
+    'Borra TODO lo cargado: lluvias, movimientos, recuentos, pesadas, sanidad, ' +
+    'recorridas, las libretas y el log. No se puede deshacer.\n\n' +
+    'No toca los potreros, los dueños, las categorías ni la configuración.\n\n' +
+    'Si estás seguro, escribí BORRAR y dale Aceptar.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  if (texto_(r.getResponseText()).toUpperCase() !== 'BORRAR') {
+    ui.alert('No borré nada.');
+    return;
+  }
+  var cuantas = vaciarRegistros_();
+  ui.alert('Listo',
+    'Borré ' + cuantas + (cuantas === 1 ? ' fila.' : ' filas.') +
+    ' La planilla quedó en cero y con las columnas al día.', ui.ButtonSet.OK);
+}
+
+/** Manda un mail de prueba a los destinatarios configurados. */
+function menuProbarAviso() {
+  var ui = SpreadsheetApp.getUi();
+  var destinos = mailsDe_('mail_avisos');
+  if (!destinos.length) {
+    ui.alert('Falta el mail',
+      'Completá "mail_avisos" en la hoja Configuración y probá de nuevo.',
+      ui.ButtonSet.OK);
+    return;
+  }
+  var dias = diasSinRegistrar_();
+  try {
+    MailApp.sendEmail(destinos.join(','), 'Campo: prueba de avisos',
+      'Si estás leyendo esto, los avisos del campo funcionan.\n\n' +
+      'Van a llegar a: ' + destinos.join(', ') + '\n' +
+      'Aviso por inactividad: a los ' + config_('dias_sin_registrar', '5') +
+      ' días sin registros.\n' +
+      'Último registro: ' + (dias < 0 ? 'todavía no hay ninguno' : 'hace ' + dias + ' días') +
+      '\n\nPlanilla: ' + ss_().getUrl());
+    ui.alert('Mandado', 'Mail de prueba enviado a: ' + destinos.join(', '),
+      ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('No pude mandarlo', String(e && e.message ? e.message : e), ui.ButtonSet.OK);
+  }
+}
+
 /** Token nuevo al azar. */
 function generarToken_() {
   var bytes = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
@@ -119,7 +185,7 @@ function menuNuevoCodigo() {
   var props = PropertiesService.getScriptProperties();
   props.setProperty(PROP_TOKEN, generarToken_());
   props.setProperty(PROP_TOKEN_CREADO, ahoraISO_());
-  registrarLog_('token nuevo', '', 0, 0, 0, 'generado desde el menú');
+  registrarLog_('token nuevo', '', '', 0, 0, 0, 'generado desde el menú');
   mostrarCodigo_(enlaceActivacion_(), true);
 }
 

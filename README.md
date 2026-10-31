@@ -26,7 +26,12 @@ celular (PWA en GitHub Pages)          Google (privado)
   minuto. El script descarta los `id` que ya tiene, así que reenviar nunca
   duplica.
 - **Nadie entra a la planilla.** El encargado sólo usa la app. No hace falta
-  cuenta de Google en el celular.
+  cuenta de Google ni clave en el celular: el código de activación se abre una
+  sola vez y queda guardado. Si se pierde el teléfono, se genera un código
+  nuevo desde el menú de la planilla y el viejo deja de servir en el acto.
+- **Se sabe quién cargó qué.** Cada celular guarda el nombre de quien lo usa y
+  lo manda en cada registro, así el dueño puede cargar desde su propio teléfono
+  sin mezclarse con el encargado.
 - **El cálculo no usa fórmulas.** El stock, las libretas y el diario de
   ocupación los arma el Apps Script en JavaScript y los escribe en las hojas.
   Las hojas de cálculo son el espejo legible, no la fuente.
@@ -70,6 +75,18 @@ npm i -g @google/clasp && clasp login
 6. **Campo Los Juancitos → Ver el código de activación**: abrí ese enlace una
    sola vez en el celular del encargado. Queda activado y el código no se ve
    nunca más.
+
+### El menú de la planilla
+
+| Opción | Qué hace |
+|---|---|
+| Instalar (una sola vez) | Carga los catálogos, mueve la planilla a su carpeta y arma los horarios. |
+| Poner las hojas al día | Agrega las columnas nuevas sin perder lo cargado. Se usa al actualizar el código. |
+| Recalcular stock y libretas | Rápido, sin el diario de ocupación. |
+| Recalcular todo | Incluye el diario de ocupación. |
+| Probar los avisos por mail | Manda un mail de prueba a los destinatarios configurados. |
+| Ver / Generar el código de activación | El enlace que se abre en el celular. |
+| Vaciar todos los registros | Borra todo lo cargado. Pide escribir BORRAR. No toca catálogos ni configuración. |
 
 ### Si se pierde el celular
 
@@ -119,12 +136,16 @@ Todas las hojas de registro terminan con las mismas cuatro columnas de control:
 
 | Hoja | Columnas (en orden) |
 |---|---|
-| **Lluvias** | `id`, `fecha`, `mm`, `lugar`, `nota`, + control |
-| **Movimientos** | `id`, `fecha`, `potrero_origen`, `potrero_destino`, `categoria`, `dueno`, `cabezas`, `motivo`, `nota`, + control |
-| **Recuentos** | `id`, `fecha`, `potrero`, `categoria`, `dueno`, `cabezas`, `nota`, + control |
-| **Pesadas** | `id`, `fecha`, `potrero`, `categoria`, `dueno`, `cabezas_pesadas`, `kg_modo`, `kg_cargados`, `kg_totales`, `kg_promedio`, `momento`, `foto_url`, `nota`, + control |
-| **Sanidad** | `id`, `fecha`, `potrero`, `tipo`, `categoria`, `categoria_destino`, `dueno`, `cabezas`, `causa_producto`, `foto_url`, `nota`, + control |
-| **Recorridas** | `id`, `fecha`, `potrero`, `agua`, `alambre`, `pasto`, `foto_url`, `nota`, + control |
+| **Lluvias** | `id`, `fecha`, `persona`, `mm`, `lugar`, `nota`, + control |
+| **Movimientos** | `id`, `fecha`, `persona`, `potrero_origen`, `potrero_destino`, `categoria`, `dueno`, `cabezas`, `motivo`, `nota`, + control |
+| **Recuentos** | `id`, `fecha`, `persona`, `potrero`, `categoria`, `dueno`, `cabezas`, `nota`, + control |
+| **Pesadas** | `id`, `fecha`, `persona`, `potrero`, `categoria`, `dueno`, `cabezas_pesadas`, `kg_modo`, `kg_cargados`, `kg_totales`, `kg_promedio`, `momento`, `foto_url`, `nota`, + control |
+| **Sanidad** | `id`, `fecha`, `persona`, `potrero`, `tipo`, `categoria`, `categoria_destino`, `dueno`, `cabezas`, `causa_producto`, `foto_url`, `nota`, + control |
+| **Recorridas** | `id`, `fecha`, `persona`, `potrero`, `agua`, `alambre`, `pasto`, `foto_url`, `nota`, + control |
+
+`persona` es quién cargó el registro: cada celular guarda un nombre al
+activarse y lo manda en todo lo que carga. `dueno` es otra cosa: de quién es la
+hacienda.
 
 - `potrero_origen` puede ser `Entrada al campo`; `potrero_destino` puede ser `Salida del campo`.
 - `kg_modo` es `total` o `promedio`: es lo que cargó el encargado. `kg_totales` y
@@ -142,8 +163,18 @@ Todas las hojas de registro terminan con las mismas cuatro columnas de control:
 | **Potreros** | `id`, `lote`, `hectareas`, `uso`, `activo` |
 | **Dueños** | `dueno`, `orden`, `activo` |
 | **Categorías** | `categoria`, `orden`, `activo` |
+| **Configuración** | `clave`, `valor`, `qué es` |
 
 `activo` en `no` saca esa fila de la app sin borrar el historial.
+
+Claves de **Configuración**:
+
+| Clave | Qué hace |
+|---|---|
+| `mail_avisos` | A quién le llegan los avisos. Varios mails separados por coma. |
+| `mail_encargado` | Mail del encargado, sólo para el aviso de inactividad. |
+| `avisar_cada_registro` | `sí` o `no`: mail cada vez que llegan registros del celular. |
+| `dias_sin_registrar` | A los cuántos días sin registros avisar. Por defecto 5. |
 
 ### Hojas que calcula el script (no editar a mano: se reescriben enteras)
 
@@ -153,7 +184,7 @@ Todas las hojas de registro terminan con las mismas cuatro columnas de control:
 | **Resumen stock** | `dueno`, `categoria`, `cabezas`, `ultimo_evento`, `recalculado_en` |
 | **Diario de ocupación** | `fecha`, `potrero`, `lote`, `hectareas`, `categoria`, `dueno`, `cabezas` |
 | **Libreta &lt;Dueño&gt;** | `Fecha`, `Categoría`, `Ingreso`, `Egreso`, `Muertes`, `Stock`, `Potrero`, `Comentarios / sanidad`, `id_registro` |
-| **Log** | `cargado_en`, `accion`, `dispositivo`, `recibidos`, `guardados`, `repetidos`, `detalle` |
+| **Log** | `cargado_en`, `accion`, `persona`, `dispositivo`, `recibidos`, `guardados`, `repetidos`, `detalle` |
 
 - `desde` es desde cuándo ese grupo está en ese potrero, y `dias` los días de
   pastoreo hasta hoy. Sirve para estimar kilos producidos por potrero:
@@ -165,6 +196,22 @@ Todas las hojas de registro terminan con las mismas cuatro columnas de control:
   ajuste con la diferencia.
 - En **Stock**, un número negativo quiere decir que se sacó hacienda de un
   potrero que nunca se contó.
+
+## Avisos por mail
+
+Se configuran en la hoja **Configuración** y los manda el propio Apps Script,
+sin servicios de por medio.
+
+- **Cada envío del celular** dispara un mail con lo que se cargó, contado en
+  castellano. Es uno por envío, no uno por registro: si el celular estuvo sin
+  señal y manda diez juntos, llega un solo mail con los diez. Un reenvío de
+  algo ya guardado no vuelve a avisar.
+- **A los días sin registros** (5 por defecto) sale un recordatorio al dueño y
+  al encargado. Lo dispara un horario diario a las 9 y no insiste: espera tres
+  días antes de repetirlo. La app además muestra un cartel en la pantalla
+  principal cuando pasa ese tiempo sin cargar nada.
+
+Para probarlos: **Campo Los Juancitos → Probar los avisos por mail**.
 
 ## Cargar las libretas de papel (carga histórica)
 

@@ -111,7 +111,8 @@ function catalogos_() {
     motivos: MOTIVOS_MOVIMIENTO,
     lugares_lluvia: LUGARES_LLUVIA,
     entrada_campo: ENTRADA_CAMPO,
-    salida_campo: SALIDA_CAMPO
+    salida_campo: SALIDA_CAMPO,
+    dias_sin_registrar: Math.round(aNumero_(config_('dias_sin_registrar', '5')))
   };
 }
 
@@ -163,7 +164,8 @@ function doPost(e) {
     var accion = texto_(cuerpo.accion) || 'guardar';
     var respuesta;
     if (accion === 'guardar') {
-      respuesta = guardarRegistros_(cuerpo.registros || [], texto_(cuerpo.dispositivo));
+      respuesta = guardarRegistros_(cuerpo.registros || [],
+        texto_(cuerpo.dispositivo), texto_(cuerpo.persona));
     } else if (accion === 'borrar') {
       respuesta = borrarRegistro_(texto_(cuerpo.hoja), texto_(cuerpo.id));
     } else if (accion === 'editar') {
@@ -205,10 +207,11 @@ function idsDeHoja_(nombre) {
  * Guarda un lote de registros. Un id que ya está en la hoja se descarta:
  * reenviar el mismo registro nunca duplica.
  */
-function guardarRegistros_(registros, dispositivo) {
+function guardarRegistros_(registros, dispositivo, persona) {
   var resultados = [];
   var porTipo = {};
   var repetidos = 0, guardados = 0;
+  var avisar = [];
 
   registros.forEach(function (r) {
     // "hoja" es a qué hoja va el registro. No se llama "tipo" porque Sanidad
@@ -250,6 +253,7 @@ function guardarRegistros_(registros, dispositivo) {
         }
       }
       datos.cargado_en = texto_(r.cargado_en) || ahoraISO_();
+      datos.persona = texto_(r.persona) || persona;
       datos.dispositivo = texto_(r.dispositivo) || dispositivo;
       datos.origen_carga = texto_(r.origen_carga) || 'App';
       datos.estado = 'activo';
@@ -259,6 +263,7 @@ function guardarRegistros_(registros, dispositivo) {
       }));
       existentes[id] = true;
       resultados.push({id: id, estado: 'guardado'});
+      avisar.push(Object.assign({hoja: tipo}, datos));
       guardados++;
     });
     if (filas.length) {
@@ -268,7 +273,9 @@ function guardarRegistros_(registros, dispositivo) {
     }
   });
 
-  registrarLog_('guardar', dispositivo, registros.length, guardados, repetidos, '');
+  registrarLog_('guardar', persona, dispositivo, registros.length, guardados,
+    repetidos, '');
+  avisarRegistros_(avisar, persona, dispositivo);
   return {ok: true, resultados: resultados, cambio: guardados > 0};
 }
 
@@ -281,7 +288,7 @@ function borrarRegistro_(tipo, id) {
   if (!fila) return {ok: false, error: 'No encontré ese registro'};
   var col = ESQUEMA[tipo].indexOf('estado') + 1;
   h.getRange(fila, col).setValue('borrado');
-  registrarLog_('borrar', '', 1, 1, 0, tipo + ' ' + id);
+  registrarLog_('borrar', '', '', 1, 1, 0, tipo + ' ' + id);
   return {ok: true, cambio: true};
 }
 
@@ -311,7 +318,7 @@ function editarRegistro_(tipo, id, campos) {
     .setValues([enc.map(function (c) {
       return (objeto[c] === undefined || objeto[c] === null) ? '' : objeto[c];
     })]);
-  registrarLog_('editar', '', 1, 1, 0, tipo + ' ' + id);
+  registrarLog_('editar', '', '', 1, 1, 0, tipo + ' ' + id);
   return {ok: true, cambio: true};
 }
 
@@ -377,7 +384,8 @@ function validar_(tipo, r) {
 }
 
 function normalizar_(tipo, r) {
-  var d = {id: texto_(r.id), fecha: aISO_(r.fecha), nota: texto_(r.nota)};
+  var d = {id: texto_(r.id), fecha: aISO_(r.fecha), nota: texto_(r.nota),
+    persona: texto_(r.persona)};
   if (tipo === HOJA.LLUVIAS) {
     d.mm = aNumero_(r.mm);
     d.lugar = texto_(r.lugar);

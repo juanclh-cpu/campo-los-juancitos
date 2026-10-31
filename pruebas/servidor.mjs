@@ -12,10 +12,12 @@ import { crearEntorno } from './google-falso.mjs';
 
 const PUERTO = Number(process.argv[2] || 8787);
 const entorno = crearEntorno();
-const { contexto, libro } = entorno;
+const { contexto, libro, mails } = entorno;
 
 // Catálogos cargados, igual que en la planilla de verdad.
 contexto.sembrarCatalogos();
+// Y un mail de mentira, para poder probar los avisos.
+contexto.completarConfig_('mail_avisos', 'prueba@ejemplo.com');
 const TOKEN = contexto.enlaceActivacion_().token;
 
 const TIPOS = {
@@ -71,6 +73,10 @@ const servidor = http.createServer(async (req, res) => {
     }), 'utf8').toString('base64url');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ token: TOKEN, codigo }));
+  }
+  if (url.pathname === '/_mails') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(mails));
   }
   if (url.pathname === '/_recalcular') {
     contexto.escribirCalculos_(true);

@@ -25,6 +25,7 @@ var HOJA = {
   STOCK: 'Stock',
   DIARIO: 'Diario de ocupación',
   RESUMEN: 'Resumen stock',
+  CONFIG: 'Configuración',
   LOG: 'Log'
 };
 
@@ -35,18 +36,18 @@ var CONTROL = ['cargado_en', 'dispositivo', 'origen_carga', 'estado'];
 
 /** Esquema exacto de cada hoja de registro (en orden de columna). */
 var ESQUEMA = {};
-ESQUEMA[HOJA.LLUVIAS] = ['id', 'fecha', 'mm', 'lugar', 'nota'].concat(CONTROL);
-ESQUEMA[HOJA.MOVIMIENTOS] = ['id', 'fecha', 'potrero_origen', 'potrero_destino',
-  'categoria', 'dueno', 'cabezas', 'motivo', 'nota'].concat(CONTROL);
-ESQUEMA[HOJA.RECUENTOS] = ['id', 'fecha', 'potrero', 'categoria', 'dueno',
-  'cabezas', 'nota'].concat(CONTROL);
-ESQUEMA[HOJA.PESADAS] = ['id', 'fecha', 'potrero', 'categoria', 'dueno',
+ESQUEMA[HOJA.LLUVIAS] = ['id', 'fecha', 'persona', 'mm', 'lugar', 'nota'].concat(CONTROL);
+ESQUEMA[HOJA.MOVIMIENTOS] = ['id', 'fecha', 'persona', 'potrero_origen',
+  'potrero_destino', 'categoria', 'dueno', 'cabezas', 'motivo', 'nota'].concat(CONTROL);
+ESQUEMA[HOJA.RECUENTOS] = ['id', 'fecha', 'persona', 'potrero', 'categoria',
+  'dueno', 'cabezas', 'nota'].concat(CONTROL);
+ESQUEMA[HOJA.PESADAS] = ['id', 'fecha', 'persona', 'potrero', 'categoria', 'dueno',
   'cabezas_pesadas', 'kg_modo', 'kg_cargados', 'kg_totales', 'kg_promedio',
   'momento', 'foto_url', 'nota'].concat(CONTROL);
-ESQUEMA[HOJA.SANIDAD] = ['id', 'fecha', 'potrero', 'tipo', 'categoria',
+ESQUEMA[HOJA.SANIDAD] = ['id', 'fecha', 'persona', 'potrero', 'tipo', 'categoria',
   'categoria_destino', 'dueno', 'cabezas', 'causa_producto', 'foto_url',
   'nota'].concat(CONTROL);
-ESQUEMA[HOJA.RECORRIDAS] = ['id', 'fecha', 'potrero', 'agua', 'alambre',
+ESQUEMA[HOJA.RECORRIDAS] = ['id', 'fecha', 'persona', 'potrero', 'agua', 'alambre',
   'pasto', 'foto_url', 'nota'].concat(CONTROL);
 
 /** Hojas de referencia y de cálculo. */
@@ -60,8 +61,9 @@ ESQUEMA_REF[HOJA.DIARIO] = ['fecha', 'potrero', 'lote', 'hectareas', 'categoria'
   'dueno', 'cabezas'];
 ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'ultimo_evento',
   'recalculado_en'];
-ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'dispositivo', 'recibidos',
-  'guardados', 'repetidos', 'detalle'];
+ESQUEMA_REF[HOJA.CONFIG] = ['clave', 'valor', 'qué es'];
+ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'persona', 'dispositivo',
+  'recibidos', 'guardados', 'repetidos', 'detalle'];
 
 /** Columnas de las hojas "Libreta <Dueño>" (una por cliente). */
 var ESQUEMA_LIBRETA = ['Fecha', 'Categoría', 'Ingreso', 'Egreso', 'Muertes',
@@ -173,11 +175,41 @@ function clave_(potrero, categoria, dueno) {
   return potrero + '\u0000' + categoria + '\u0000' + dueno;
 }
 
-function registrarLog_(accion, dispositivo, recibidos, guardados, repetidos, detalle) {
+/**
+ * Valores que se editan a mano en la hoja Configuración: a quién avisarle,
+ * cada cuánto, etc. Así se cambian sin tocar el código.
+ */
+var CONFIG_POR_DEFECTO = [
+  ['mail_avisos', '', 'A quién le llegan los avisos. Varios mails separados por coma.'],
+  ['mail_encargado', '', 'Mail del encargado, para el aviso de "hace días que no cargás".'],
+  ['avisar_cada_registro', 'sí', '¿Mandar un mail cada vez que llegan registros? sí / no'],
+  ['dias_sin_registrar', '5', 'A los cuántos días sin registros avisar.']
+];
+
+/** Lee un valor de la hoja Configuración. */
+function config_(clave, porDefecto) {
+  var filas = leerHoja_(HOJA.CONFIG);
+  for (var i = 0; i < filas.length; i++) {
+    if (texto_(filas[i].clave) === clave) {
+      var v = texto_(filas[i].valor);
+      if (v !== '') return v;
+    }
+  }
+  return porDefecto;
+}
+
+/** Lista de mails de una clave de configuración, ya limpia. */
+function mailsDe_(clave) {
+  return config_(clave, '').split(',')
+    .map(function (m) { return texto_(m); })
+    .filter(function (m) { return m.indexOf('@') > 0; });
+}
+
+function registrarLog_(accion, persona, dispositivo, recibidos, guardados, repetidos, detalle) {
   try {
     var h = hoja_(HOJA.LOG, ESQUEMA_REF[HOJA.LOG]);
-    h.appendRow([ahoraISO_(), accion, dispositivo || '', recibidos || 0,
-      guardados || 0, repetidos || 0, detalle || '']);
+    h.appendRow([ahoraISO_(), accion, persona || '', dispositivo || '',
+      recibidos || 0, guardados || 0, repetidos || 0, detalle || '']);
   } catch (e) {
     // el log nunca debe hacer fallar un guardado
   }

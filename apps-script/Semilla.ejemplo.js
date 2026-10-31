@@ -14,6 +14,13 @@
 /** Dónde guardar la planilla dentro de tu Drive (carpeta, subcarpeta, ...). */
 var CARPETA_DESTINO = ['Mi empresa', 'Administración'];
 
+/** A quién le llegan los avisos de los registros. Después se cambia
+    desde la hoja Configuración de la planilla. */
+var MAIL_AVISOS = 'vos@ejemplo.com';
+
+/** Mail del encargado, para el aviso de "hace días que no cargás". */
+var MAIL_ENCARGADO = '';
+
 /** La dirección /exec del Web App desplegado (la que usa el celular). */
 var URL_WEBAPP = 'https://script.google.com/macros/s/.../exec';
 

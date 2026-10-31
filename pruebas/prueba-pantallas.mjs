@@ -111,12 +111,13 @@ async function principal() {
   try {
     console.log('\nPreparar: activar y poner el PIN');
     await pagina.goto(BASE + '/#a=' + activacion.codigo, { waitUntil: 'networkidle0' });
-    await pagina.waitForFunction(() => /Elegí 4 números/.test(document.body.textContent));
-    await foto(pagina, '01-clave');
-    for (const vuelta of [1, 2]) {
-      for (const d of ['1', '2', '3', '4']) await tecla(pagina, d);
-      await dormir(300);
-    }
+    await pagina.waitForFunction(() => /Cómo te llamás/.test(document.body.textContent));
+    await foto(pagina, '01-nombre');
+    await pagina.evaluate(n => {
+      const i = document.querySelector('input[type="text"]');
+      i.value = n;
+      [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'LISTO').click();
+    }, 'Nahuel');
     await volverAlInicio(pagina);
     await pagina.waitForFunction(() => window.CAT && CAT.potreros.length > 0);
     await pagina.evaluate(() => pintar());
@@ -203,6 +204,7 @@ async function principal() {
     const lluvia = fila(planilla, 'Lluvias');
     ok(Number(lluvia.mm) === 25 && lluvia.lugar === 'Casa',
       'la lluvia quedó bien', lluvia.mm + ' mm en ' + lluvia.lugar);
+    ok(lluvia.persona === 'Nahuel', 'y quedó quién la cargó', lluvia.persona);
 
     const rec = fila(planilla, 'Recuentos');
     ok(rec.potrero === P1 && Number(rec.cabezas) === 30 && rec.categoria === CAT_A &&
@@ -271,6 +273,18 @@ async function principal() {
     await foto(pagina, '17-ultimos-registros');
     const cuantos = await pagina.evaluate(() => document.querySelectorAll('.ficha').length);
     ok(cuantos === 6, 'los 6 registros se pueden corregir o borrar', cuantos + ' fichas');
+    const conNombre = await pagina.evaluate(() =>
+      [...document.querySelectorAll('.ficha .cuando')].filter(e => /Nahuel/.test(e.textContent)).length);
+    ok(conNombre === 6, 'y cada uno dice quién lo cargó', conNombre + ' con nombre');
+
+    console.log('\n9. Avisos por mail');
+    const mails = await (await fetch(BASE + '/_mails')).json();
+    ok(mails.length >= 1, 'salió al menos un aviso', mails.length + ' mails');
+    ok(mails.every(m => /^Campo: Nahuel cargó/.test(m.asunto)),
+      'el asunto dice quién cargó y cuántos',
+      mails.map(m => m.asunto).join(' | '));
+    ok(mails.some(m => /Llovieron 25 mm/.test(m.cuerpo)),
+      'y el cuerpo lo cuenta en castellano');
 
   } finally {
     await navegador.close();

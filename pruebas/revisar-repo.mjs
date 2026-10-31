@@ -12,7 +12,8 @@ import fs from 'node:fs';
 const SOSPECHAS = [
   ['token o clave', /AKfycb[\w-]{20,}|AIza[\w-]{30,}|ya29\.[\w-]+/g],
   ['id de planilla o de script', /\b1[A-Za-z0-9_-]{42,}\b/g],
-  ['dirección de mail', /\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/g],
+  // ejemplo.com y example.com son dominios reservados para ejemplos.
+  ['dirección de mail', /\b[\w.+-]+@(?!ejemplo\.com|example\.com)[\w-]+\.[\w.]{2,}\b/g],
   ['listado de potreros con hectáreas', /\['\w{1,4}',\s*\d+\.\d\s*,\s*'(Pastura|Verdeo|Agrícola)/g]
 ];
 
