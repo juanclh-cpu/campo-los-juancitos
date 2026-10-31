@@ -1,7 +1,7 @@
 {
-  "name": "Campo",
-  "short_name": "Campo",
-  "description": "Registro de lo que pasa en el campo",
+  "name": "Registro Campo LJ",
+  "short_name": "Campo LJ",
+  "description": "Registro de lo que pasa en el campo Los Juancitos",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
@@ -10,8 +10,23 @@
   "theme_color": "#1b5e20",
   "lang": "es-AR",
   "icons": [
-    {"src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "iconos/icono-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "iconos/icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "iconos/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "iconos/icono-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

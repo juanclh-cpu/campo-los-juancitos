@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v4';
+var VERSION = 'v5';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -592,8 +592,8 @@ PANTALLAS.inicio = function () {
 
   cuerpo.push(boton('Carga: ' + (CFG.persona || 'sin nombre') + ' — cambiar',
     function () { ir('nombre', {}); }, 'secundario'));
-  cuerpo.push(el('p', 'pie', 'Campo ' + VERSION + ' · ' + fechaEnPalabras(hoyISO())));
-  return marco('Campo', cuerpo, {sinVolver: true});
+  cuerpo.push(el('p', 'pie', 'Campo LJ ' + VERSION + ' · ' + fechaEnPalabras(hoyISO())));
+  return marco('Registro Campo LJ', cuerpo, {sinVolver: true});
 };
 
 // ===========================================================================
