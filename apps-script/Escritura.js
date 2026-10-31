@@ -4,13 +4,19 @@
  * reescriben completas: son el espejo legible del cálculo, no la fuente.
  */
 
-/** Borra el contenido debajo del encabezado y escribe las filas nuevas. */
+/**
+ * Borra el contenido debajo del encabezado y escribe las filas nuevas.
+ * El encabezado se reescribe siempre: estas hojas las maneja el script, así
+ * que si al código se le sumó una columna la hoja se acomoda sola.
+ */
 function volcar_(nombre, encabezados, filas) {
   var h = hoja_(nombre, encabezados);
   if (h.getLastRow() > 1) {
     h.getRange(2, 1, h.getLastRow() - 1, Math.max(h.getLastColumn(), encabezados.length))
       .clearContent();
   }
+  h.getRange(1, 1, 1, encabezados.length).setValues([encabezados]).setFontWeight('bold');
+  h.setFrozenRows(1);
   if (filas.length) {
     h.getRange(2, 1, filas.length, encabezados.length).setValues(filas);
   }
