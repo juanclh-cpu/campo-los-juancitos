@@ -22,6 +22,14 @@ function instalar() {
     lineas.push('Falta URL_DE_LA_APP: cargala con el menú de la planilla.');
   }
 
+  try {
+    crearDisparadorDiario();
+    lineas.push('Recálculo automático: todas las noches a las 22.');
+  } catch (e) {
+    lineas.push('Sin recálculo automático (falta el permiso de disparadores): ' +
+      'usá el menú para recalcular.');
+  }
+
   escribirCalculos_(true);
 
   var info = enlaceActivacion_();

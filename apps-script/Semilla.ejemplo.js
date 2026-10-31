@@ -14,6 +14,9 @@
 /** Dónde guardar la planilla dentro de tu Drive (carpeta, subcarpeta, ...). */
 var CARPETA_DESTINO = ['Mi empresa', 'Administración'];
 
+/** La dirección /exec del Web App desplegado (la que usa el celular). */
+var URL_WEBAPP = 'https://script.google.com/macros/s/.../exec';
+
 /** Dónde está publicada la app. De acá sale el enlace de activación. */
 var URL_DE_LA_APP = 'https://TU-USUARIO.github.io/TU-REPO/app/';
 
@@ -55,7 +58,11 @@ function sembrarCatalogos() {
     CATEGORIAS_INICIALES.map(function (c, i) { return [c, i + 1, 'sí']; }));
 
   enlaceActivacion_();   // crea el token si todavía no existe
-  crearDisparadorDiario();
+  try {
+    crearDisparadorDiario();
+  } catch (e) {
+    // Si falta el permiso de disparadores, el resto se instala igual.
+  }
   return 'Catálogos cargados: ' + filasPotrero.length + ' potreros, ' +
     DUENOS_INICIALES.length + ' dueños, ' + CATEGORIAS_INICIALES.length + ' categorías.';
 }

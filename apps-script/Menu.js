@@ -89,8 +89,12 @@ function enlaceActivacion_() {
     props.setProperty(PROP_TOKEN_CREADO, ahoraISO_());
   }
   var urlApp = props.getProperty(PROP_URL_APP) || '';
-  var urlApi = '';
-  try { urlApi = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+  // Preferimos la /exec que quedó guardada: getUrl() devuelve la /dev cuando
+  // el script corre desde la planilla, y esa no le sirve al celular.
+  var urlApi = (typeof URL_WEBAPP === 'string' && URL_WEBAPP) ? URL_WEBAPP : '';
+  if (!urlApi) {
+    try { urlApi = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+  }
   var datos = base64url_(JSON.stringify({u: urlApi, t: token}));
   return {
     urlApp: urlApp,
