@@ -8,6 +8,10 @@
 // 1. Cosas sueltas
 // ===========================================================================
 
+/* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
+   pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
+var VERSION = 'v2';
+
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
 var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
@@ -589,7 +593,7 @@ PANTALLAS.inicio = function () {
 
   cuerpo.push(boton('Carga: ' + (CFG.persona || 'sin nombre') + ' — cambiar',
     function () { ir('nombre', {}); }, 'secundario'));
-  cuerpo.push(el('p', 'pie', 'Campo · ' + fechaEnPalabras(hoyISO())));
+  cuerpo.push(el('p', 'pie', 'Campo ' + VERSION + ' · ' + fechaEnPalabras(hoyISO())));
   return marco('Campo', cuerpo, {sinVolver: true});
 };
 
