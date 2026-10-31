@@ -180,7 +180,7 @@ export function crearEntorno() {
 
   vm.createContext(contexto);
   const dir = path.resolve('apps-script');
-  ['Config.js', 'Stock.js', 'Escritura.js', 'Api.js', 'Menu.js', 'Semilla.js']
+  ['Config.js', 'Stock.js', 'Escritura.js', 'Api.js', 'Menu.js', 'Instalar.js', 'Semilla.js']
     .forEach(f => {
       vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), contexto, { filename: f });
     });

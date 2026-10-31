@@ -1,4 +1,3 @@
-**/**
-!apps-script/*.js
-!apps-script/appsscript.json
-apps-script/Semilla.ejemplo.js
+# Las rutas son relativas a rootDir (apps-script/).
+# El ejemplo no se sube: el que manda es Semilla.js.
+Semilla.ejemplo.js

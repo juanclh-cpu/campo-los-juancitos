@@ -11,6 +11,12 @@
  */
 
 // [id del potrero, hectáreas, uso]. El lote sale del número del id: "3b" es del lote 3.
+/** Dónde guardar la planilla dentro de tu Drive (carpeta, subcarpeta, ...). */
+var CARPETA_DESTINO = ['Mi empresa', 'Administración'];
+
+/** Dónde está publicada la app. De acá sale el enlace de activación. */
+var URL_DE_LA_APP = 'https://TU-USUARIO.github.io/TU-REPO/app/';
+
 var POTREROS_INICIALES = [
   ['1a', 20.0, 'Pastura'], ['1b', 25.0, 'Agrícola'], ['1c', 18.5, 'Pastura'],
   ['1d', 12.0, 'Pastura'], ['1e', 30.0, 'Agrícola'], ['1f', 15.5, 'Pastura'],
