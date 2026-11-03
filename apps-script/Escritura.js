@@ -62,7 +62,7 @@ function escribirCalculos_(conDiario) {
 function armarHojas_() {
   Object.keys(ESQUEMA).forEach(function (n) { hoja_(n, ESQUEMA[n]); });
   [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.STOCK, HOJA.DIARIO,
-    HOJA.RESUMEN, HOJA.CONFIG, HOJA.LOG].forEach(function (n) {
+    HOJA.RESUMEN, HOJA.CONFIG, HOJA.AVISOS, HOJA.LOG].forEach(function (n) {
     hoja_(n, ESQUEMA_REF[n]);
   });
   sembrarConfiguracion_();

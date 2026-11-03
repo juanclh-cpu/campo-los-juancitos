@@ -26,6 +26,7 @@ var HOJA = {
   DIARIO: 'Diario de ocupación',
   RESUMEN: 'Resumen stock',
   CONFIG: 'Configuración',
+  AVISOS: 'Avisos',
   LOG: 'Log'
 };
 
@@ -62,6 +63,7 @@ ESQUEMA_REF[HOJA.DIARIO] = ['fecha', 'potrero', 'lote', 'hectareas', 'categoria'
 ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'potreros',
   'ultimo_evento', 'recalculado_en'];
 ESQUEMA_REF[HOJA.CONFIG] = ['clave', 'valor', 'qué es'];
+ESQUEMA_REF[HOJA.AVISOS] = ['fecha', 'mensaje', 'activo'];
 ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'persona', 'dispositivo',
   'recibidos', 'guardados', 'repetidos', 'detalle'];
 
@@ -74,7 +76,7 @@ var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
 
 var TIPOS_SANIDAD = ['Nacimiento', 'Muerte', 'Enfermo', 'Tratamiento',
-  'Vacunación', 'Cambio de categoría'];
+  'Vacunación', 'Capada de terneros', 'Cambio de categoría'];
 var MOTIVOS_MOVIMIENTO = ['Rotación', 'Entrada', 'Venta', 'Faena',
   'Devolución a dueño', 'Otro'];
 var LUGARES_LLUVIA = ['Casa', 'Manga', 'Otro'];

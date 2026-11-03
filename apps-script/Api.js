@@ -126,9 +126,16 @@ function catalogos_() {
     .map(function (f) { return texto_(f.categoria); })
     .filter(function (c) { return c; });
 
+  // Avisos para el encargado: se cargan a mano en la hoja Avisos y se ven
+  // arriba de todo en la pantalla de inicio hasta que se ponen en "no".
+  var avisos = leerHoja_(HOJA.AVISOS)
+    .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no' && texto_(f.mensaje); })
+    .map(function (f) { return texto_(f.mensaje); });
+
   return {
     potreros: potreros,
     duenos: duenos,
+    avisos: avisos,
     categorias: categorias,
     tipos_sanidad: TIPOS_SANIDAD,
     motivos: MOTIVOS_MOVIMIENTO,

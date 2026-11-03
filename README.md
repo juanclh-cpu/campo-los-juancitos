@@ -164,6 +164,7 @@ hacienda.
 | **Dueños** | `dueno`, `orden`, `activo` |
 | **Categorías** | `categoria`, `orden`, `activo` |
 | **Configuración** | `clave`, `valor`, `qué es` |
+| **Avisos** | `fecha`, `mensaje`, `activo` |
 
 `activo` en `no` saca esa fila de la app sin borrar el historial.
 
@@ -226,9 +227,17 @@ encargado mueve y después cuenta, manda el recuento.
 
 ## Decisiones que conviene saber
 
-- **Un potrero en negativo no es un error del programa**: quiere decir que se
-  sacó hacienda de un potrero que nunca se contó. La app lo avisa en *Hacienda
-  hoy* y se arregla contando ese potrero.
+- **Si se mueve más hacienda de la que había cargada**, la diferencia se da de
+  alta sola a nombre de ese dueño, en vez de dejar el potrero en negativo. En
+  la libreta del cliente queda una fila de ingreso con el comentario "Alta
+  automática... Confirmar con un recuento". Pasa cuando se mueve hacienda de un
+  potrero que nunca se contó.
+- **Un potrero en negativo** todavía puede aparecer si se cargan más muertes
+  que cabezas anotadas. La app lo avisa en *Stock* y se arregla contando ese
+  potrero.
+- **Los avisos para el encargado** se escriben a mano en la hoja Avisos y
+  aparecen arriba de todo en la pantalla principal de la app hasta que se
+  ponen en `no`.
 - **Corregir = borrar y volver a cargar.** Más simple de explicar y deja el
   historial completo.
 - **Nada se borra de verdad.** Las filas borradas quedan con `estado` en

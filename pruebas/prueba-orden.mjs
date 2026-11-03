@@ -39,6 +39,7 @@ function nuevoCampo() {
   const cat = e.contexto.catalogos_();
   const potreros = cat.potreros.filter(p => p.id !== 'Corral/manga').map(p => p.id);
   return {
+    potrerosSembrados: e.contexto.leerHoja_('Potreros').length,
     post, stock, libreta, pegar, entorno: e, mails: e.mails,
     config: (clave, valor) => {
       const h = e.contexto.hoja_('Configuración', ['clave', 'valor', 'qué es']);
@@ -293,9 +294,10 @@ titulo('11. Vaciar los registros deja la planilla en cero');
   ok(borradas === 1, 'dice cuántas filas borró', String(borradas));
   ok(campo.entorno.contexto.leerHoja_('Recuentos').length === 0, 'la hoja quedó vacía');
   ok(campo.stock().size === 0, 'y el stock en cero');
-  ok(campo.entorno.contexto.leerHoja_('Potreros').length === 33,
+  var cuantosPotreros = campo.entorno.contexto.leerHoja_('Potreros').length;
+  ok(cuantosPotreros === campo.potrerosSembrados,
     'pero los potreros siguen estando',
-    campo.entorno.contexto.leerHoja_('Potreros').length + ' potreros');
+    cuantosPotreros + ' potreros');
 }
 
 titulo('12. Una planilla con los encabezados viejos se pone al día sola');
@@ -336,6 +338,93 @@ titulo('12. Una planilla con los encabezados viejos se pone al día sola');
   ok(nueva && nueva.persona === 'Nahuel' && Number(nueva.mm) === 42,
     'y la nueva entró con quién la cargó',
     nueva ? nueva.persona + ', ' + nueva.mm + ' mm' : 'no está');
+}
+
+titulo('13. Mover más hacienda de la que había: se da de alta sola');
+{
+  const campo = nuevoCampo();
+  // Sin ningún recuento previo: el potrero está en cero.
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'alta-1', hoja: 'Movimientos', fecha: '2026-10-20',
+      cargado_en: '2026-10-20T10:00:00', potrero_origen: campo.P1,
+      potrero_destino: campo.P2, categoria: campo.C1, dueno: campo.D1,
+      cabezas: 30, motivo: 'Rotación' }
+  ] });
+  const s = campo.stock();
+  ok(s.get(campo.P1 + '|' + campo.C1 + '|' + campo.D1) === undefined,
+    'el potrero de salida queda en cero, no en negativo',
+    String(s.get(campo.P1 + '|' + campo.C1 + '|' + campo.D1)));
+  ok(s.get(campo.P2 + '|' + campo.C1 + '|' + campo.D1) === 30,
+    'las 30 llegaron al destino');
+
+  const filas = campo.libreta(campo.D1);
+  ok(filas.length === 1 && filas[0].ingreso === 30 && filas[0].stock === 30,
+    'la libreta del cliente las anota como ingreso',
+    filas.length ? ('ingreso ' + filas[0].ingreso + ', stock ' + filas[0].stock) : 'vacía');
+  ok(/Alta autom/.test(filas[0].comentario) && /recuento/.test(filas[0].comentario),
+    'y el comentario explica que hay que confirmarlo con un recuento',
+    filas[0].comentario);
+}
+
+titulo('14. Mover más de lo que había: sólo da de alta la diferencia');
+{
+  const campo = nuevoCampo();
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'r1', hoja: 'Recuentos', fecha: '2026-10-19', cargado_en: '2026-10-19T10:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 10 },
+    { id: 'm1', hoja: 'Movimientos', fecha: '2026-10-20',
+      cargado_en: '2026-10-20T10:00:00', potrero_origen: campo.P1,
+      potrero_destino: campo.P2, categoria: campo.C1, dueno: campo.D1,
+      cabezas: 30, motivo: 'Rotación' }
+  ] });
+  const s = campo.stock();
+  ok(s.get(campo.P2 + '|' + campo.C1 + '|' + campo.D1) === 30, 'llegaron las 30');
+  ok(s.get(campo.P1 + '|' + campo.C1 + '|' + campo.D1) === undefined,
+    'y el de salida quedó en cero');
+
+  const filas = campo.libreta(campo.D1);
+  const alta = filas.find(f => /Alta autom/.test(f.comentario || ''));
+  ok(alta && alta.ingreso === 20, 'dio de alta sólo las 20 que faltaban',
+    alta ? String(alta.ingreso) : 'no hay alta');
+  ok(filas[filas.length - 1].stock === 30,
+    'el saldo del cliente queda en 30', String(filas[filas.length - 1].stock));
+}
+
+titulo('15. Avisos para el encargado');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const h = ctx.hoja_('Avisos', ['fecha', 'mensaje', 'activo']);
+  h.appendRow(['2026-11-03', 'El lunes viene el veterinario', 'sí']);
+  h.appendRow(['2026-10-01', 'Aviso viejo', 'no']);
+  h.appendRow(['2026-11-03', '', 'sí']);
+
+  const avisos = ctx.catalogos_().avisos;
+  ok(avisos.length === 1 && avisos[0] === 'El lunes viene el veterinario',
+    'la app recibe sólo los avisos activos y con texto',
+    JSON.stringify(avisos));
+
+  ok(ctx.leerHoja_('Avisos').length === 3,
+    'la hoja Avisos existe y se crea sola con armarHojas_');
+}
+
+titulo('16. Capada de terneros');
+{
+  const campo = nuevoCampo();
+  const r = campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'r1', hoja: 'Recuentos', fecha: '2026-10-19', cargado_en: '2026-10-19T10:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 40 },
+    { id: 'cap-1', hoja: 'Sanidad', fecha: '2026-10-20',
+      cargado_en: '2026-10-20T10:00:00', potrero: campo.P1,
+      tipo: 'Capada de terneros', categoria: campo.C1, dueno: campo.D1,
+      cabezas: 12, causa_producto: '' }
+  ] });
+  const porId = Object.fromEntries(r.resultados.map(x => [x.id, x]));
+  ok(porId['cap-1'].estado === 'guardado', 'el script la acepta como tipo válido',
+    porId['cap-1'].mensaje || '');
+  ok(campo.stock().get(campo.P1 + '|' + campo.C1 + '|' + campo.D1) === 40,
+    'y no mueve el stock, como tratamiento o vacunación',
+    String(campo.stock().get(campo.P1 + '|' + campo.C1 + '|' + campo.D1)));
 }
 
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'

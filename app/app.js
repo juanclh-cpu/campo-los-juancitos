@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v5';
+var VERSION = 'v6';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -551,6 +551,10 @@ PANTALLAS.inicio = function () {
     cuerpo.push(el('div', 'falta',
       'Falta bajar la lista de potreros. Buscá un lugar con señal y abrí la app otra vez.'));
   }
+
+  ((CAT && CAT.avisos) || []).forEach(function (m) {
+    cuerpo.push(el('div', 'falta', '📣 ' + m));
+  });
 
   var sinCargar = diasSinCargar();
   var limite = (CAT && CAT.dias_sin_registrar) || 5;
@@ -1195,6 +1199,7 @@ function defSanidad() {
       if (v.tipo === 'Enfermo') return 'Hay ' + que + ' enfermas' + donde;
       if (v.tipo === 'Tratamiento') return 'Tratamiento a ' + que + donde;
       if (v.tipo === 'Vacunación') return 'Vacunación de ' + que + donde;
+      if (v.tipo === 'Capada de terneros') return 'Se caparon ' + que + donde;
       if (v.tipo === 'Cambio de categoría') {
         return que + donde + ' pasan a ' + (v.categoria_destino || '').toLowerCase();
       }

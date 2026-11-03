@@ -63,7 +63,7 @@ async function principal() {
   pagina.on('pageerror', e => { console.log('  ! error en la app:', e.message); fallas++; });
 
   try {
-    titulo('1. Activar la app con el código y poner el PIN');
+    titulo('1. Activar la app con el código y poner el nombre');
     await pagina.goto(BASE + '/#a=' + activacion.codigo, { waitUntil: 'networkidle0' });
     await pagina.waitForFunction(() => /Cómo te llamás/.test(document.body.textContent));
     const hash = await pagina.evaluate(() => location.hash);
@@ -205,8 +205,17 @@ async function principal() {
     titulo('7. Diario de ocupación');
     const diario = filasDe(planilla, 'Diario de ocupación');
     const dias = new Set(diario.map(f => f[0]));
-    ok(dias.size === 17, 'hay una foto por día desde el primer recuento hasta hoy',
-      dias.size + ' días (' + [...dias][0] + ' → ' + [...dias][dias.size - 1] + ')');
+    // El diario arranca con el primer evento que mueve stock: las lluvias,
+    // las pesadas y las recorridas no cuentan.
+    const MUEVEN = ['Recuentos', 'Movimientos', 'Sanidad'];
+    const primerDia = registros
+      .filter(r => MUEVEN.indexOf(r.hoja) >= 0).map(r => r.fecha).sort()[0];
+    const hoy = new Date().toISOString().slice(0, 10);
+    const diasEsperados = Math.round(
+      (new Date(hoy + 'T12:00:00Z') - new Date(primerDia + 'T12:00:00Z')) / 86400000) + 1;
+    ok(dias.size === diasEsperados,
+      'hay una foto por día desde el primer registro hasta hoy',
+      dias.size + ' días de ' + diasEsperados + ' (' + primerDia + ' → ' + hoy + ')');
     const ultimoDia = [...dias].sort().pop();
     const cabezasUltimoDia = diario.filter(f => f[0] === ultimoDia)
       .reduce((a, f) => a + Number(f[6] || 0), 0);

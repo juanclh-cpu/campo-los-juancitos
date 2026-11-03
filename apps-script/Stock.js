@@ -184,6 +184,20 @@ function calcularTodo_(conDiario) {
       }
 
     } else if (e.clase === 'movimiento') {
+      // Si se saca de un potrero más hacienda de la que había cargada (por
+      // ejemplo, un cliente que nunca se dio de alta), la diferencia se da de
+      // alta sola a nombre de ese dueño, así el movimiento no deja negativos.
+      if (e.origen && e.origen !== ENTRADA_CAMPO && e.origen !== SALIDA_CAMPO) {
+        var go = grupo_(e.origen, e.categoria, e.dueno);
+        var habia = Math.max(go.cabezas, 0);
+        var falta = e.cabezas - habia;
+        if (falta > 0) {
+          sumar_(e.origen, e.categoria, e.dueno, falta, e.fecha);
+          anotar_(e, e.dueno, e.categoria, falta, '', '', e.origen,
+            'Alta automática: se movieron ' + e.cabezas + ' desde ' + e.origen +
+            ' y había ' + habia + ' cargadas. Confirmar con un recuento.');
+        }
+      }
       sumar_(e.origen, e.categoria, e.dueno, -e.cabezas, e.fecha);
       sumar_(e.destino, e.categoria, e.dueno, e.cabezas, e.fecha);
       var entra = (e.origen === ENTRADA_CAMPO);
