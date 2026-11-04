@@ -23,6 +23,7 @@ function asegurarHojasAlDia_() {
   try {
     armarHojas_();
     ponerHojasAlDia_();
+    asegurarFormatoTexto_();
   } catch (e) {
     registrarLog_('no pude poner las hojas al día', '', '', 0, 0, 0,
       String(e && e.message ? e.message : e));

@@ -15,6 +15,8 @@ function volcar_(nombre, encabezados, filas) {
     h.getRange(2, 1, h.getLastRow() - 1, Math.max(h.getLastColumn(), encabezados.length))
       .clearContent();
   }
+  // El formato va antes de escribir: después ya es tarde, el valor quedó mal.
+  formatoDeColumnas_(h, encabezados);
   h.getRange(1, 1, 1, encabezados.length).setValues([encabezados]).setFontWeight('bold');
   h.setFrozenRows(1);
   if (filas.length) {
@@ -119,6 +121,7 @@ function ponerHojasAlDia_() {
     });
 
     h.clear();
+    formatoDeColumnas_(h, esquema);
     h.getRange(1, 1, 1, esquema.length).setValues([esquema]);
     h.getRange(1, 1, 1, esquema.length).setFontWeight('bold');
     h.setFrozenRows(1);
@@ -140,6 +143,7 @@ function vaciarRegistros_() {
     var h = hoja_(nombre, ESQUEMA[nombre]);
     if (h.getLastRow() > 1) borradas += h.getLastRow() - 1;
     h.clear();
+    formatoDeColumnas_(h, ESQUEMA[nombre]);
     h.getRange(1, 1, 1, ESQUEMA[nombre].length).setValues([ESQUEMA[nombre]]);
     h.getRange(1, 1, 1, ESQUEMA[nombre].length).setFontWeight('bold');
     h.setFrozenRows(1);
@@ -158,6 +162,36 @@ function vaciarRegistros_() {
 
   escribirCalculos_(true);
   return borradas;
+}
+
+var PROP_FORMATO_TEXTO = 'FORMATO_TEXTO_APLICADO';
+
+/**
+ * Arregla de una sola vez las hojas que ya existían antes de que las columnas
+ * se escribieran como texto. Corre una vez y queda anotado, así no cuesta
+ * nada en cada envío.
+ */
+function asegurarFormatoTexto_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_FORMATO_TEXTO)) return false;
+  aplicarFormatoATodo_();
+  props.setProperty(PROP_FORMATO_TEXTO, ahoraISO_());
+  return true;
+}
+
+/** Pone el formato de texto en todas las hojas, incluidas las libretas. */
+function aplicarFormatoATodo_() {
+  Object.keys(ESQUEMA).forEach(function (n) {
+    formatoDeColumnas_(hoja_(n, ESQUEMA[n]), ESQUEMA[n]);
+  });
+  Object.keys(ESQUEMA_REF).forEach(function (n) {
+    formatoDeColumnas_(hoja_(n, ESQUEMA_REF[n]), ESQUEMA_REF[n]);
+  });
+  ss_().getSheets().forEach(function (h) {
+    if (h.getName().indexOf(PREFIJO_LIBRETA) === 0) {
+      formatoDeColumnas_(h, ESQUEMA_LIBRETA);
+    }
+  });
 }
 
 /** Recalcula stock y libretas (rápido). */

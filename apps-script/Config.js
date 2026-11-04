@@ -84,6 +84,37 @@ var LUGARES_LLUVIA = ['Casa', 'Manga', 'Otro'];
 var CARPETA_FOTOS = 'Registro Campo - Fotos';
 
 // ---------------------------------------------------------------------------
+// Formato de las columnas
+// ---------------------------------------------------------------------------
+
+/**
+ * Al escribir, la planilla interpreta el texto como si lo tipeara una persona.
+ * Por eso un potrero que se llama "7" queda guardado como el número 7, y el
+ * texto "7: 141" (141 cabezas en el potrero 7) queda guardado como la hora
+ * 9:21, que es 7 horas más 141 minutos.
+ *
+ * La solución es poner en texto plano todas las columnas, menos las que de
+ * verdad son números o fechas, que se listan acá.
+ */
+var COLUMNAS_NUMERO = ['mm', 'cabezas', 'cabezas_pesadas', 'kg_cargados',
+  'kg_totales', 'kg_promedio', 'hectareas', 'dias', 'orden', 'recibidos',
+  'guardados', 'repetidos', 'Ingreso', 'Egreso', 'Muertes', 'Stock'];
+
+var COLUMNAS_FECHA = ['fecha', 'Fecha', 'desde', 'ultimo_evento', 'cargado_en',
+  'recalculado_en'];
+
+/** Pone en texto plano las columnas que no son números ni fechas. */
+function formatoDeColumnas_(h, encabezados) {
+  if (!encabezados || !encabezados.length) return;
+  var filas = Math.max(h.getMaxRows(), 2);
+  for (var i = 0; i < encabezados.length; i++) {
+    var col = encabezados[i];
+    if (COLUMNAS_NUMERO.indexOf(col) >= 0 || COLUMNAS_FECHA.indexOf(col) >= 0) continue;
+    h.getRange(1, i + 1, filas, 1).setNumberFormat('@');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers de planilla
 // ---------------------------------------------------------------------------
 
@@ -98,6 +129,7 @@ function hoja_(nombre, encabezados) {
   if (!h) {
     h = libro.insertSheet(nombre);
     if (encabezados) {
+      formatoDeColumnas_(h, encabezados);
       h.getRange(1, 1, 1, encabezados.length).setValues([encabezados]);
       h.setFrozenRows(1);
       h.getRange(1, 1, 1, encabezados.length).setFontWeight('bold');

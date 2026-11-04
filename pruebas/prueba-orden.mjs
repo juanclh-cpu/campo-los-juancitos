@@ -427,6 +427,108 @@ titulo('16. Capada de terneros');
     String(campo.stock().get(campo.P1 + '|' + campo.C1 + '|' + campo.D1)));
 }
 
+titulo('17. Un potrero con nombre de número no se convierte en hora ni en número');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+
+  // El potrero "7" con 141 cabezas: en Resumen stock la columna potreros
+  // dice "7: 141", que Sheets leería como 7 horas y 141 minutos = 9:21.
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'n1', hoja: 'Recuentos', fecha: '2026-11-01', cargado_en: '2026-11-01T10:00:00',
+      potrero: '7', categoria: campo.C1, dueno: campo.D1, cabezas: 141 },
+    { id: 'n2', hoja: 'Recuentos', fecha: '2026-11-01', cargado_en: '2026-11-01T10:05:00',
+      potrero: '7', categoria: campo.C2, dueno: campo.D1, cabezas: 4 }
+  ] });
+  ctx.escribirCalculos_(true);
+
+  const leer = (hoja) => {
+    const filas = ctx.leerHoja_(hoja);
+    return filas;
+  };
+
+  const resumen = leer('Resumen stock');
+  const fila141 = resumen.find(f => String(f.categoria) === campo.C1);
+  const fila4 = resumen.find(f => String(f.categoria) === campo.C2);
+
+  ok(fila141 && fila141.potreros === '7: 141',
+    'la columna potreros guarda el texto tal cual, no una hora',
+    fila141 ? JSON.stringify(fila141.potreros) : 'no está');
+  ok(fila4 && fila4.potreros === '7: 4',
+    'y también cuando los minutos serían una hora válida',
+    fila4 ? JSON.stringify(fila4.potreros) : 'no está');
+  ok(fila141 && typeof fila141.potreros === 'string',
+    'queda guardada como texto');
+
+  const stock = leer('Stock');
+  ok(stock.every(f => typeof f.potrero === 'string'),
+    'en Stock el potrero "7" sigue siendo texto, no el número 7',
+    JSON.stringify(stock.map(f => f.potrero)));
+
+  const libreta = leer('Libreta ' + campo.D1);
+  ok(libreta.every(f => typeof f.Potrero === 'string'),
+    'y en la libreta del cliente también',
+    JSON.stringify(libreta.map(f => f.Potrero)));
+
+  const diario = leer('Diario de ocupación');
+  ok(diario.every(f => typeof f.potrero === 'string'),
+    'y en el diario de ocupación');
+
+  // Los números tienen que seguir siendo números.
+  ok(stock.every(f => typeof f.cabezas === 'number'),
+    'las cabezas siguen siendo números, no texto',
+    JSON.stringify(stock.map(f => f.cabezas)));
+  ok(fila141 && typeof fila141.cabezas === 'number',
+    'también en el resumen');
+}
+
+titulo('18. Una planilla que ya tenía el valor mal guardado se arregla sola');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const props = campo.entorno.propiedades;
+
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'v1', hoja: 'Recuentos', fecha: '2026-11-01', cargado_en: '2026-11-01T10:00:00',
+      potrero: '7', categoria: campo.C1, dueno: campo.D1, cabezas: 141 }
+  ] });
+
+  // Dejamos la planilla como estaba antes del arreglo: sin formato de texto,
+  // con la hora 9:21 en la columna potreros y sin la marca de reparado.
+  const h = ctx.hoja_('Resumen stock', []);
+  h.formatos = [];
+  h.getRange(2, 4).setValues([['7: 141']]);
+  props.delete('FORMATO_TEXTO_APLICADO');
+  // En Google cada pedido es una ejecución nueva; acá el contexto se comparte,
+  // así que reseteamos la marca de "ya revisé las hojas" a mano.
+  ctx.HOJAS_REVISADAS = false;
+
+  ok(ctx.leerHoja_('Resumen stock')[0].potreros === '9:21',
+    'arrancamos con el error puesto, como la planilla de JC',
+    JSON.stringify(ctx.leerHoja_('Resumen stock')[0].potreros));
+
+  // Llega un registro cualquiera del celular.
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'v2', hoja: 'Lluvias', fecha: '2026-11-02', cargado_en: '2026-11-02T10:00:00',
+      mm: 12, lugar: 'Casa' }
+  ] });
+
+  ok(ctx.leerHoja_('Resumen stock')[0].potreros === '7: 141',
+    'el primer envío que llega lo deja bien, sin que nadie toque nada',
+    JSON.stringify(ctx.leerHoja_('Resumen stock')[0].potreros));
+  ok(!!props.get('FORMATO_TEXTO_APLICADO'), 'y queda anotado que ya se reparó');
+
+  // Y no se repite en cada envío.
+  const marca = props.get('FORMATO_TEXTO_APLICADO');
+  ctx.HOJAS_REVISADAS = false;
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'v3', hoja: 'Lluvias', fecha: '2026-11-03', cargado_en: '2026-11-03T10:00:00',
+      mm: 3, lugar: 'Casa' }
+  ] });
+  ok(props.get('FORMATO_TEXTO_APLICADO') === marca,
+    'la reparación corre una sola vez');
+}
+
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'
   : '✗ ' + fallas + ' prueba(s) fallaron.'));
 process.exit(fallas === 0 ? 0 : 1);

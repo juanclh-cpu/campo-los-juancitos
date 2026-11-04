@@ -9,6 +9,24 @@ import vm from 'node:vm';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+/**
+ * Imita cómo Sheets interpreta un texto al escribirlo, salvo que la columna
+ * tenga formato de texto plano. Es lo que convierte "7: 141" en una hora.
+ */
+function comoLoGuardariaSheets(valor, formato) {
+  if (formato === '@') return valor;
+  if (typeof valor !== 'string') return valor;
+  const t = valor.trim();
+  if (t === '') return valor;
+  const hora = t.match(/^(\d{1,3})\s*:\s*(\d{1,3})$/);
+  if (hora) {
+    const total = Number(hora[1]) * 60 + Number(hora[2]);
+    return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+  }
+  if (/^-?\d+([.,]\d+)?$/.test(t)) return Number(t.replace(',', '.'));
+  return valor;
+}
+
 class Rango {
   constructor(hoja, fila, col, nFilas, nCols) {
     this.hoja = hoja; this.fila = fila; this.col = col;
@@ -31,7 +49,11 @@ class Rango {
     valores.forEach((linea, r) => {
       const fi = this.fila - 1 + r;
       while (this.hoja.datos.length <= fi) this.hoja.datos.push([]);
-      linea.forEach((v, c) => { this.hoja.datos[fi][this.col - 1 + c] = v; });
+      linea.forEach((v, c) => {
+        const col = this.col - 1 + c;
+        this.hoja.datos[fi][col] =
+          comoLoGuardariaSheets(v, this.hoja.formatos[col]);
+      });
     });
     return this;
   }
@@ -45,11 +67,16 @@ class Rango {
     return this;
   }
   setFontWeight() { return this; }
-  setNumberFormat() { return this; }
+  setNumberFormat(formato) {
+    for (let c = 0; c < this.nCols; c++) {
+      this.hoja.formatos[this.col - 1 + c] = formato;
+    }
+    return this;
+  }
 }
 
 class Hoja {
-  constructor(nombre) { this.nombre = nombre; this.datos = []; }
+  constructor(nombre) { this.nombre = nombre; this.datos = []; this.formatos = []; }
   getName() { return this.nombre; }
   getLastRow() {
     for (let i = this.datos.length - 1; i >= 0; i--) {
@@ -70,11 +97,13 @@ class Hoja {
   getDataRange() { return new Rango(this, 1, 1, Math.max(this.getLastRow(), 1), Math.max(this.getLastColumn(), 1)); }
   getRange(f, c, nf = 1, nc = 1) { return new Rango(this, f, c, nf, nc); }
   appendRow(fila) {
-    this.datos[this.getLastRow()] = fila.slice();
+    this.datos[this.getLastRow()] = fila.map((v, c) =>
+      comoLoGuardariaSheets(v, this.formatos[c]));
     return this;
   }
   setFrozenRows() { return this; }
   clear() { this.datos = []; return this; }
+  getMaxRows() { return Math.max(this.datos.length, 1000); }
 }
 
 class Libro {

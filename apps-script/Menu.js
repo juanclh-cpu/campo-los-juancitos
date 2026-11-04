@@ -78,6 +78,7 @@ function menuPonerAlDia() {
   var ui = SpreadsheetApp.getUi();
   armarHojas_();
   var cambiadas = ponerHojasAlDia_();
+  aplicarFormatoATodo_();
   try {
     crearDisparadorDiario();
     crearDisparadorInactividad();
