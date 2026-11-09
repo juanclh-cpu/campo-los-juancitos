@@ -84,6 +84,7 @@ npm i -g @google/clasp && clasp login
 | Poner las hojas al día | Agrega las columnas nuevas sin perder lo cargado. Se usa al actualizar el código. |
 | Recalcular stock y libretas | Rápido, sin el diario de ocupación. |
 | Recalcular todo | Incluye el diario de ocupación. |
+| Recalcular ahora si hace falta | Lo mismo que hace el horario de cada 5 minutos. |
 | Probar los avisos por mail | Manda un mail de prueba a los destinatarios configurados. |
 | Mandar parte semanal ahora | Manda el parte de los últimos 7 días sin esperar al sábado. |
 | Ver / Generar el código de activación | El enlace que se abre en el celular. |
@@ -161,7 +162,7 @@ hacienda.
 
 | Hoja | Columnas |
 |---|---|
-| **Potreros** | `id`, `lote`, `hectareas`, `uso`, `activo` |
+| **Potreros** | `id`, `lote`, `hectareas`, `uso`, `activo`, `recurso`, `quien_lo_usa`, `nota` |
 | **Dueños** | `dueno`, `orden`, `activo` |
 | **Categorías** | `categoria`, `orden`, `activo` |
 | **Configuración** | `clave`, `valor`, `qué es` |
@@ -180,6 +181,8 @@ Claves de **Configuración**:
 | `mail_parte` | A quién le llega el parte semanal de los sábados. Vacío: no se manda. |
 | `dias_descanso_max` | En el parte, avisar los potreros con más días de descanso. Por defecto 45. |
 | `dias_ocupado_max` | En el parte, avisar los potreros ocupados hace más días. Por defecto 7. |
+| `recalcular_pedido` | Poner `sí` para que recalcule en los próximos 5 minutos. Se vuelve solo a `no`. |
+| `ultimo_recalculo` | Cuándo se recalculó por última vez. Lo escribe el script. |
 
 ### Hojas que calcula el script (no editar a mano: se reescriben enteras)
 
@@ -222,6 +225,60 @@ sin servicios de por medio.
   ocupación. Para probarlo: *Mandar parte semanal ahora*.
 
 Para probarlos: **Campo Los Juancitos → Probar los avisos por mail**.
+
+## La hoja Potreros es la lista única del campo
+
+Los potreros se cargan y se editan **sólo acá**. Además de lo que usa la app
+(`id`, `lote`, `hectareas`, `uso`, `activo`), la hoja tiene `recurso`,
+`quien_lo_usa` y `nota` para anotar a mano, y se le pueden agregar más
+columnas: el script no las toca ni las borra, y `sembrarCatalogos()` no vuelve
+a escribir la hoja una vez que tiene filas.
+
+La planilla **Financiera** toma los potreros de esta hoja: **allá no se
+editan**. El copiado de datos y el IMPORTRANGE los hace Claude desde Cowork, no
+esta app. El id de la Financiera está en `docs/resumen-para-cowork.md`, que no
+se publica: este repo es público y no lleva ids de planillas.
+
+## Recálculo sin esperar a la noche
+
+Un horario cada 5 minutos revisa si hay algo que recalcular y, si lo hay,
+rehace Stock, Resumen, libretas y Descanso. Se da cuenta de dos formas:
+
+- la clave `recalcular_pedido` de la hoja Configuración dice `sí` (y al
+  terminar la vuelve a `no`), o
+- cambió alguna de las hojas de eventos (Movimientos, Recuentos, Pesadas,
+  Sanidad). Para saberlo guarda una huella de cada hoja —cuántas filas tiene
+  más un hash de los valores— en las propiedades del script. Así detecta
+  también **las filas pegadas a mano o por la API**, que no pasan por la app.
+
+El diario de ocupación se rehace sólo si cambió algo que lo mueva. Cuándo fue
+el último recálculo queda en `ultimo_recalculo`.
+
+También se puede pedir por la API: `GET ?accion=recalcular&token=…` recalcula
+en el momento y devuelve el resumen (cabezas, líneas de stock, de resumen y de
+descanso).
+
+## Despliegue automático
+
+Cada push a `main` dispara `.github/workflows/deploy.yml`: corre `npm test` y,
+si pasa, sube el Apps Script con clasp y actualiza el Web App existente, sin
+cambiar la dirección. Después verifica el endpoint con un ping. La app web la
+sigue publicando GitHub Pages por su cuenta.
+
+Hacen falta cuatro secrets en el repo:
+
+| Secret | Qué es |
+|---|---|
+| `CLASPRC_JSON` | El `~/.clasprc.json` de la cuenta dueña de la planilla. |
+| `SCRIPT_ID` | El id del proyecto de Apps Script. |
+| `DEPLOYMENT_ID` | El id del despliegue de producción. |
+| `SEMILLA_JS` | El contenido de `apps-script/Semilla.js`, que no se publica. |
+
+`SEMILLA_JS` hace falta porque `clasp push` deja el proyecto igual a lo que
+hay en disco: sin ese archivo, borraría `Semilla.js` del script en Google.
+
+Mientras no estén los cuatro, el workflow corre las pruebas y **no** despliega,
+avisando con un warning. Si están a medias, falla.
 
 ## Cargar las libretas de papel (carga histórica)
 

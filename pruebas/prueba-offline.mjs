@@ -9,7 +9,9 @@ import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 import { armarRegistros, stockEsperado, stockPorDuenoYCategoria } from './datos-de-prueba.mjs';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// En la Mac es el Chrome de siempre; en el servidor de GitHub, el que haya.
+const CHROME = process.env.CHROME ||
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PUERTO = 8899;
 const BASE = 'http://localhost:' + PUERTO;
 

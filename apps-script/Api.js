@@ -91,6 +91,9 @@ function doGet(e) {
         duenos: Object.keys(calc.libretas).sort()
       });
     }
+    if (accion === 'recalcular') {
+      return json_(Object.assign({ok: true}, recalcularSiHaceFalta(true)));
+    }
     if (accion === 'ultimos') {
       return json_({ok: true, registros: ultimosRegistros_(texto_(p.dispositivo))});
     }

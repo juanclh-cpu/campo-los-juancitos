@@ -1,0 +1,115 @@
+# Cada push a main corre las pruebas y, si pasan, sube el Apps Script y
+# actualiza el Web App existente (la dirección no cambia).
+#
+# Los cuatro secrets se cargan una vez con gh secret set:
+#   CLASPRC_JSON   el ~/.clasprc.json de la cuenta de Google dueña de la planilla
+#   SCRIPT_ID      el id del proyecto de Apps Script
+#   DEPLOYMENT_ID  el id del despliegue de producción (la URL del Web App)
+#   SEMILLA_JS     apps-script/Semilla.js, que no se publica en el repo
+#
+# La app web la publica GitHub Pages por su cuenta, desde la rama main.
+
+name: Desplegar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Un despliegue por vez: dos a la vez se pisarían.
+concurrency:
+  group: desplegar
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    env:
+      CLASP: npx --yes @google/clasp@3.4.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Buscar el Chrome del servidor
+        run: |
+          navegador=$(command -v google-chrome || command -v google-chrome-stable \
+            || command -v chromium-browser || true)
+          if [ -z "$navegador" ]; then
+            echo "No hay Chrome en el servidor: las pruebas de pantalla lo necesitan."
+            exit 1
+          fi
+          echo "Chrome: $navegador"
+          echo "CHROME=$navegador" >> "$GITHUB_ENV"
+
+      - name: Pruebas
+        run: npm test
+
+      # Mientras falten TODOS los secrets, las pruebas corren igual y no se
+      # despliega. Si están a medias, falla: eso es que algo se rompió.
+      - name: ¿Están las credenciales?
+        id: credenciales
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          SEMILLA_JS: ${{ secrets.SEMILLA_JS }}
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: |
+          faltan=""
+          for s in CLASPRC_JSON SCRIPT_ID SEMILLA_JS DEPLOYMENT_ID; do
+            eval "valor=\${$s}"
+            [ -n "$valor" ] || faltan="$faltan $s"
+          done
+          if [ -z "$faltan" ]; then
+            echo "desplegar=si" >> "$GITHUB_OUTPUT"
+          elif [ "$faltan" = " CLASPRC_JSON SCRIPT_ID SEMILLA_JS DEPLOYMENT_ID" ]; then
+            echo "desplegar=no" >> "$GITHUB_OUTPUT"
+            echo "::warning::Todavía no hay secrets cargados: corrí las pruebas y no desplegué."
+          else
+            echo "::error::Faltan secrets:$faltan"
+            exit 1
+          fi
+
+      - name: Poner las credenciales
+        if: steps.credenciales.outputs.desplegar == 'si'
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          SEMILLA_JS: ${{ secrets.SEMILLA_JS }}
+        run: |
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '%s' "$SEMILLA_JS" > apps-script/Semilla.js
+          printf '{"scriptId":"%s","rootDir":"apps-script"}' "$SCRIPT_ID" > .clasp.json
+
+      - name: Subir el Apps Script
+        if: steps.credenciales.outputs.desplegar == 'si'
+        run: $CLASP push --force
+
+      - name: Actualizar el Web App
+        if: steps.credenciales.outputs.desplegar == 'si'
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: $CLASP update-deployment "$DEPLOYMENT_ID" --description produccion
+
+      - name: Verificar que contesta
+        if: steps.credenciales.outputs.desplegar == 'si'
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: |
+          respuesta=$(curl -sL --max-time 60 \
+            "https://script.google.com/macros/s/$DEPLOYMENT_ID/exec?accion=ping")
+          echo "$respuesta"
+          echo "$respuesta" | grep -q '"ok":true' \
+            || { echo "El Web App no contestó bien"; exit 1; }
+
+      - name: Borrar las credenciales
+        if: always()
+        run: rm -f ~/.clasprc.json apps-script/Semilla.js .clasp.json

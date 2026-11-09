@@ -12,6 +12,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Recalcular stock y libretas', 'menuRecalcularRapido')
     .addItem('Recalcular todo (incluye diario de ocupación)', 'menuRecalcularTodo')
+    .addItem('Recalcular ahora si hace falta', 'menuRecalcularSiHaceFalta')
     .addSeparator()
     .addItem('Probar los avisos por mail', 'menuProbarAviso')
     .addItem('Mandar parte semanal ahora', 'menuParteSemanal')
@@ -84,6 +85,7 @@ function menuPonerAlDia() {
     crearDisparadorDiario();
     crearDisparadorInactividad();
     crearDisparadorParte();
+    crearDisparadorRecalculo();
   } catch (e) {}
   escribirCalculos_(true);
   ui.alert('Listo', cambiadas.length
@@ -110,6 +112,16 @@ function menuVaciar() {
   ui.alert('Listo',
     'Borré ' + cuantas + (cuantas === 1 ? ' fila.' : ' filas.') +
     ' La planilla quedó en cero y con las columnas al día.', ui.ButtonSet.OK);
+}
+
+/** Recalcula si cambió algo, igual que el horario de cada 5 minutos. */
+function menuRecalcularSiHaceFalta() {
+  var r = recalcularSiHaceFalta(false);
+  SpreadsheetApp.getUi().alert(r.recalculado
+    ? 'Listo. Recalculé: ' + (r.a_pedido ? 'estaba pedido' : 'cambió ' +
+        r.cambiaron.join(', ')) + '.\n\n' + r.cabezas + ' cabezas en ' +
+        r.lineas_stock + ' líneas de stock.'
+    : 'No hizo falta: ' + r.motivo + '.');
 }
 
 /** Manda el parte semanal en el momento, para probarlo. */

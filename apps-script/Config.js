@@ -54,7 +54,10 @@ ESQUEMA[HOJA.RECORRIDAS] = ['id', 'fecha', 'persona', 'potrero', 'agua', 'alambr
 
 /** Hojas de referencia y de cálculo. */
 var ESQUEMA_REF = {};
-ESQUEMA_REF[HOJA.POTREROS] = ['id', 'lote', 'hectareas', 'uso', 'activo'];
+// La app usa id, lote, hectareas, uso y activo. Las demás son para anotar a
+// mano y para la planilla Financiera: el script no las toca ni las borra.
+ESQUEMA_REF[HOJA.POTREROS] = ['id', 'lote', 'hectareas', 'uso', 'activo',
+  'recurso', 'quien_lo_usa', 'nota'];
 ESQUEMA_REF[HOJA.DUENOS] = ['dueno', 'orden', 'activo'];
 ESQUEMA_REF[HOJA.CATEGORIAS] = ['categoria', 'orden', 'activo'];
 ESQUEMA_REF[HOJA.STOCK] = ['potrero', 'lote', 'hectareas', 'categoria', 'dueno',
@@ -231,7 +234,9 @@ var CONFIG_POR_DEFECTO = [
   ['dias_sin_registrar', '5', 'A los cuántos días sin registros avisar.'],
   ['mail_parte', '', 'A quién le llega el parte semanal de los sábados. Vacío: no se manda.'],
   ['dias_descanso_max', '45', 'En el parte, avisar los potreros con más días de descanso que esto.'],
-  ['dias_ocupado_max', '7', 'En el parte, avisar los potreros ocupados hace más días que esto.']
+  ['dias_ocupado_max', '7', 'En el parte, avisar los potreros ocupados hace más días que esto.'],
+  ['recalcular_pedido', 'no', 'Poner "sí" para que recalcule en los próximos 5 minutos. Se vuelve solo a "no".'],
+  ['ultimo_recalculo', '', 'Cuándo se recalculó por última vez. Lo escribe el script.']
 ];
 
 /**

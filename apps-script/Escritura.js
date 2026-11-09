@@ -74,6 +74,12 @@ function armarHojas_() {
     HOJA.LOG].forEach(function (n) {
     hoja_(n, ESQUEMA_REF[n]);
   });
+  // Las hojas que se editan a mano pueden tener columnas propias: se les
+  // agregan las que falten al final y no se les borra ninguna.
+  [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.AVISOS,
+    HOJA.CONFIG].forEach(function (n) {
+    agregarColumnasFaltantes_(n, ESQUEMA_REF[n]);
+  });
   sembrarConfiguracion_();
   var libro = ss_();
   var h1 = libro.getSheetByName('Hoja 1') || libro.getSheetByName('Sheet1') ||
@@ -82,6 +88,31 @@ function armarHojas_() {
     libro.deleteSheet(h1);
   }
   return true;
+}
+
+/**
+ * Agrega al final las columnas del esquema que la hoja todavía no tenga.
+ * No mueve ni borra las que haya de más: la hoja Potreros es la lista única
+ * del campo y se le anotan cosas que el script no usa.
+ */
+function agregarColumnasFaltantes_(nombre, esquema) {
+  var h = hoja_(nombre, esquema);
+  var ultimaCol = Math.max(h.getLastColumn(), 1);
+  var actuales = h.getRange(1, 1, 1, ultimaCol).getValues()[0]
+    .map(function (v) { return texto_(v); });
+  var faltan = esquema.filter(function (c) { return actuales.indexOf(c) < 0; });
+  if (!faltan.length) return [];
+  var desde = actuales.length + 1;
+  // Si la última columna está vacía, escribimos ahí mismo.
+  while (desde > 1 && actuales[desde - 2] === '') desde--;
+  h.getRange(1, desde, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
+  for (var i = 0; i < faltan.length; i++) {
+    if (COLUMNAS_NUMERO.indexOf(faltan[i]) < 0 &&
+        COLUMNAS_FECHA.indexOf(faltan[i]) < 0) {
+      h.getRange(1, desde + i, Math.max(h.getMaxRows(), 2), 1).setNumberFormat('@');
+    }
+  }
+  return faltan;
 }
 
 /** Carga las filas de Configuración que falten, sin pisar las que ya están. */

@@ -40,7 +40,7 @@ function nuevoCampo() {
   const potreros = cat.potreros.filter(p => p.id !== 'Corral/manga').map(p => p.id);
   return {
     potrerosSembrados: e.contexto.leerHoja_('Potreros').length,
-    post, stock, libreta, pegar, entorno: e, mails: e.mails,
+    post, stock, libreta, pegar, entorno: e, mails: e.mails, token,
     config: (clave, valor) => {
       const h = e.contexto.hoja_('Configuración', ['clave', 'valor', 'qué es']);
       const filas = e.contexto.leerHoja_('Configuración');
@@ -781,6 +781,128 @@ titulo('25. Parte semanal');
     'y va en HTML', partes()[0].asunto);
   ok(partes()[0].para === 'dueno@ejemplo.com', 'a quien dice la configuración',
     partes()[0].para);
+}
+
+titulo('26. Recálculo cada 5 minutos: sólo si cambió algo');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+
+  const primera = ctx.recalcularSiHaceFalta(false);
+  ok(primera.recalculado === true, 'la primera vez recalcula y guarda la huella',
+    primera.motivo || '');
+
+  const segunda = ctx.recalcularSiHaceFalta(false);
+  ok(segunda.recalculado === false && /no cambió/.test(segunda.motivo),
+    'si no cambió nada, no vuelve a recalcular', segunda.motivo);
+
+  // Una fila pegada a mano, como las que carga JC por la API de Sheets.
+  campo.pegar('Recuentos', [{ id: 'mano-1', fecha: '2026-11-08',
+    potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 77,
+    origen_carga: 'Carga histórica', estado: 'activo' }]);
+
+  const tercera = ctx.recalcularSiHaceFalta(false);
+  ok(tercera.recalculado === true && tercera.cambiaron.indexOf('Recuentos') >= 0,
+    'una fila pegada a mano dispara el recálculo',
+    tercera.cambiaron.join(', '));
+  ok(tercera.con_diario === true,
+    'y como cambió el stock, también rehace el diario');
+  ok(campo.stock().get(campo.P1 + '|' + campo.C1 + '|' + campo.D1) === 77,
+    'el stock queda al día sin esperar a la noche');
+
+  // Una pesada no mueve el stock, así que no hace falta rehacer el diario.
+  campo.pegar('Pesadas', [{ id: 'pes-1', fecha: '2026-11-08', potrero: campo.P1,
+    categoria: campo.C1, dueno: campo.D1, cabezas_pesadas: 10, kg_modo: 'total',
+    kg_cargados: 4000, kg_totales: 4000, kg_promedio: 400, momento: 'Control',
+    origen_carga: 'App', estado: 'activo' }]);
+  const cuarta = ctx.recalcularSiHaceFalta(false);
+  ok(cuarta.recalculado === true && cuarta.cambiaron.join() === 'Pesadas',
+    'una pesada también dispara el recálculo', cuarta.cambiaron.join(', '));
+  ok(cuarta.con_diario === false,
+    'pero sin rehacer el diario, que no cambia');
+}
+
+titulo('27. Recálculo pedido desde la planilla');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  ctx.recalcularSiHaceFalta(false);                   // deja la huella al día
+
+  campo.config('recalcular_pedido', 'sí');
+  const r = ctx.recalcularSiHaceFalta(false);
+  ok(r.recalculado === true && r.a_pedido === true,
+    'con recalcular_pedido en "sí" recalcula aunque no haya cambiado nada');
+  ok(r.con_diario === true, 'y hace el diario también');
+
+  const config = ctx.leerHoja_('Configuración');
+  const pedido = config.find(f => f.clave === 'recalcular_pedido');
+  const ultimo = config.find(f => f.clave === 'ultimo_recalculo');
+  ok(pedido && String(pedido.valor) === 'no',
+    'después lo deja en "no" solo', pedido ? String(pedido.valor) : 'no está');
+  ok(ultimo && /^\d{4}-\d{2}-\d{2}T/.test(String(ultimo.valor)),
+    'y anota cuándo recalculó', ultimo ? String(ultimo.valor) : 'no está');
+
+  const otra = ctx.recalcularSiHaceFalta(false);
+  ok(otra.recalculado === false, 'y no se queda pedido para siempre');
+}
+
+titulo('28. accion=recalcular por la API');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  campo.pegar('Recuentos', [{ id: 'api-1', fecha: '2026-11-08',
+    potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 30,
+    origen_carga: 'Carga histórica', estado: 'activo' }]);
+
+  const r = JSON.parse(ctx.doGet({ parameter: {
+    accion: 'recalcular', token: campo.token } }).getContent());
+  ok(r.ok === true && r.recalculado === true, 'recalcula en el momento');
+  ok(r.cabezas === 30 && r.lineas_stock === 1,
+    'y devuelve el resumen', r.cabezas + ' cabezas, ' + r.lineas_stock + ' líneas');
+  ok(typeof r.lineas_descanso === 'number' && r.lineas_descanso > 0,
+    'incluyendo Descanso', String(r.lineas_descanso));
+
+  const sinToken = JSON.parse(ctx.doGet({ parameter: {
+    accion: 'recalcular', token: 'cualquiera' } }).getContent());
+  ok(sinToken.ok === false && sinToken.codigo === 'token',
+    'y sin el código de activación no deja');
+}
+
+titulo('29. La hoja Potreros es la lista única del campo');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const h = ctx.hoja_('Potreros', []);
+
+  const enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
+  ['id', 'lote', 'hectareas', 'uso', 'activo', 'recurso', 'quien_lo_usa', 'nota']
+    .forEach(c => ok(enc.indexOf(c) >= 0, 'tiene la columna "' + c + '"'));
+
+  // Una columna propia, de las que agrega JC a mano.
+  const propia = h.getLastColumn() + 1;
+  h.getRange(1, propia).setValue('observaciones mías');
+  h.getRange(2, propia).setValue('alambrado nuevo');
+
+  ctx.armarHojas_();
+  const enc2 = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
+  ok(enc2.indexOf('observaciones mías') >= 0,
+    'armarHojas_ no borra las columnas que no conoce');
+  ok(String(h.getRange(2, propia).getValues()[0][0]) === 'alambrado nuevo',
+    'ni lo que esté escrito en ellas');
+
+  // Y volver a sembrar no pisa la lista ya cargada.
+  const antes = ctx.leerHoja_('Potreros').length;
+  h.getRange(2, 6).setValue('aguada');
+  const r = ctx.sembrarCatalogos();
+  ok(/ya estaban cargados/.test(r), 'sembrarCatalogos no vuelve a escribirla', r);
+  ok(ctx.leerHoja_('Potreros').length === antes, 'quedan las mismas filas');
+  ok(String(h.getRange(2, 6).getValues()[0][0]) === 'aguada',
+    'y lo anotado en recurso sigue ahí');
+
+  // La app sigue usando sólo lo que necesita.
+  const p = ctx.catalogos_().potreros[0];
+  ok(Object.keys(p).join(',') === 'id,lote,hectareas,uso',
+    'la app recibe sólo id, lote, hectáreas y uso', Object.keys(p).join(', '));
 }
 
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'

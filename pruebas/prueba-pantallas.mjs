@@ -13,7 +13,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import puppeteer from 'puppeteer-core';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// En la Mac es el Chrome de siempre; en el servidor de GitHub, el que haya.
+const CHROME = process.env.CHROME ||
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PUERTO = 8901;
 const BASE = 'http://localhost:' + PUERTO;
 const CAPTURAS = 'docs/capturas';

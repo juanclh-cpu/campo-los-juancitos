@@ -177,7 +177,13 @@ export function crearEntorno() {
       base64Encode: s => Buffer.from(s, 'utf8').toString('base64'),
       base64EncodeWebSafe: s => Buffer.from(s, 'utf8').toString('base64url'),
       base64Decode: s => Array.from(Buffer.from(s, 'base64')),
-      newBlob: (bytes, tipo, nombre) => ({ bytes, tipo, nombre })
+      newBlob: (bytes, tipo, nombre) => ({ bytes, tipo, nombre }),
+      DigestAlgorithm: { MD5: 'MD5' },
+      computeDigest: (algoritmo, texto) => {
+        const h = crypto.createHash('md5').update(texto, 'utf8').digest();
+        // Apps Script devuelve bytes con signo, de -128 a 127.
+        return Array.from(h).map(b => (b > 127 ? b - 256 : b));
+      }
     },
     DriveApp: {
       getFileById: () => ({ getParents: () => ({ hasNext: () => false }) }),
@@ -193,7 +199,8 @@ export function crearEntorno() {
       newTrigger: () => ({
         timeBased: () => ({
           atHour: () => ({ everyDays: () => ({ create: () => {} }), create: () => {} }),
-          onWeekDay: () => ({ atHour: () => ({ create: () => {} }) })
+          onWeekDay: () => ({ atHour: () => ({ create: () => {} }) }),
+          everyMinutes: () => ({ create: () => {} })
         })
       }),
       deleteTrigger: () => {}
@@ -225,8 +232,12 @@ export function crearEntorno() {
 
   vm.createContext(contexto);
   const dir = path.resolve('apps-script');
-  ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Parte.js', 'Api.js',
-    'Menu.js', 'Instalar.js', 'Semilla.js']
+  // En CI no está Semilla.js (tiene los datos del campo y no se publica):
+  // ahí se usa el de ejemplo, que tiene la misma forma.
+  const semilla = fs.existsSync(path.join(dir, 'Semilla.js'))
+    ? 'Semilla.js' : 'Semilla.ejemplo.js';
+  ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Parte.js',
+    'Recalculo.js', 'Api.js', 'Menu.js', 'Instalar.js', semilla]
     .forEach(f => {
       vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), contexto, { filename: f });
     });

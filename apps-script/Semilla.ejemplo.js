@@ -51,6 +51,12 @@ var CATEGORIAS_INICIALES = ['Vaca', 'Vaca preñada', 'Vaca vacía', 'Vaca CUT',
 function sembrarCatalogos() {
   armarHojas_();
 
+  // Los catálogos se siembran sólo si están vacíos: una vez cargados, la
+  // planilla manda. Así volver a correr instalar() no pisa lo que se editó.
+  if (leerHoja_(HOJA.POTREROS).length) {
+    return 'Los catálogos ya estaban cargados: no toqué nada.';
+  }
+
   var filasPotrero = POTREROS_INICIALES.map(function (p) {
     var lote = String(p[0]).match(/^\d+/);
     return [p[0], lote ? lote[0] : '', p[1], p[2], 'sí'];

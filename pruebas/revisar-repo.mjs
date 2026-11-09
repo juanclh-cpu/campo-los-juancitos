@@ -13,7 +13,9 @@ const SOSPECHAS = [
   ['token o clave', /AKfycb[\w-]{20,}|AIza[\w-]{30,}|ya29\.[\w-]+/g],
   ['id de planilla o de script', /\b1[A-Za-z0-9_-]{42,}\b/g],
   // ejemplo.com y example.com son dominios reservados para ejemplos.
-  ['dirección de mail', /\b[\w.+-]+@(?!ejemplo\.com|example\.com)[\w-]+\.[\w.]{2,}\b/g],
+  // El dominio tiene que terminar en letras: así "clasp@3.4.1" no cuenta.
+  ['dirección de mail',
+    /\b[\w.+-]+@(?!ejemplo\.com|example\.com)[\w-]+\.(?:[\w-]+\.)*[a-zA-Z]{2,}\b/g],
   ['listado de potreros con hectáreas', /\['\w{1,4}',\s*\d+\.\d\s*,\s*'(Pastura|Verdeo|Agrícola)/g]
 ];
 
@@ -44,6 +46,19 @@ for (const archivo of archivos) {
 for (const prohibido of ['apps-script/Semilla.js', '.clasp.json', '.clasprc.json']) {
   if (archivos.includes(prohibido)) {
     console.log(`  ⚠ ${prohibido} está versionado y no debería`);
+    problemas++;
+  }
+}
+
+// Un workflow mal escrito no despliega nunca y no avisa: mejor que falle acá.
+for (const archivo of archivos.filter(a => /^\.github\/workflows\/.*\.ya?ml$/.test(a))) {
+  try {
+    const yaml = (await import('js-yaml')).default;
+    const d = yaml.load(fs.readFileSync(archivo, 'utf8'));
+    if (!d || !d.jobs) throw new Error('no tiene jobs');
+    console.log(`  ✓ ${archivo}: ${Object.keys(d.jobs).length} job(s)`);
+  } catch (e) {
+    console.log(`  ⚠ ${archivo}: ${e.message}`);
     problemas++;
   }
 }
