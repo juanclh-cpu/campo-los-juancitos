@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v6';
+var VERSION = 'v7';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -232,6 +232,11 @@ async function apiPost(cuerpo) {
 // ===========================================================================
 
 var ESTADO = {pendientes: 0, problemas: 0, enviando: false, ultimoEnvio: null};
+
+/* Cómo quedó el stock después de cada guardado, por id de registro. Lo manda
+   el script con la respuesta del POST: la cuenta la hace la planilla, no el
+   teléfono. Se usa una vez, para mostrar la pantalla, y se tira. */
+var ESTADO_STOCK_POR_ID = {};
 var TEMPORIZADOR = null;
 
 async function contarCola() {
@@ -242,7 +247,7 @@ async function contarCola() {
 }
 
 /** Pone un registro en la cola y dispara el envío. */
-async function encolarGuardar(registro) {
+async function encolarGuardar(registro, sinMandar) {
   registro.cargado_en = registro.cargado_en || ahoraISO();
   registro.persona = registro.persona || CFG.persona;
   registro.dispositivo = CFG.dispositivo;
@@ -254,7 +259,7 @@ async function encolarGuardar(registro) {
     registro: registro, creado: new Date().toISOString(), error: ''
   });
   await contarCola();
-  sincronizar();
+  if (!sinMandar) sincronizar();
 }
 
 async function encolarBorrar(tipo, idRegistro) {
@@ -322,6 +327,9 @@ async function sincronizar(forzar) {
       }
       var porId = {};
       (respuesta.resultados || []).forEach(function (r) { porId[r.id] = r; });
+      if (respuesta.estado_stock) {
+        lote.forEach(function (c) { ESTADO_STOCK_POR_ID[c.id] = respuesta.estado_stock; });
+      }
       for (var j = 0; j < lote.length; j++) {
         var res = porId[lote[j].id];
         if (!res) continue;
@@ -539,7 +547,7 @@ var BOTONES_INICIO = [
   {ico: '🐄', texto: 'Mover', pantalla: 'mover'},
   {ico: '🔢', texto: 'Contar', pantalla: 'contar'},
   {ico: '⚖️', texto: 'Pesada', pantalla: 'pesada'},
-  {ico: '🩺', texto: 'Sanidad', pantalla: 'sanidad'},
+  {ico: '🩺', texto: 'Manejo', pantalla: 'sanidad'},
   {ico: '👁️', texto: 'Recorrida', pantalla: 'recorrida'}
 ];
 
@@ -950,11 +958,14 @@ function confirmacion(def, valores) {
   });
 
   if (def.textoCorto) {
-    cuerpo.push(el('p', 'lote', def.textoCorto.etiqueta));
+    var etiqueta = def.textoCorto.etiqueta;
+    var ejemplo = def.textoCorto.ejemplo;
+    cuerpo.push(el('p', 'lote',
+      typeof etiqueta === 'function' ? etiqueta(valores) : etiqueta));
     var ec = el('input');
     ec.type = 'text';
     ec.value = valores[def.textoCorto.campo] || '';
-    ec.placeholder = def.textoCorto.ejemplo || '';
+    ec.placeholder = (typeof ejemplo === 'function' ? ejemplo(valores) : ejemplo) || '';
     ec.addEventListener('input', function () {
       valores[def.textoCorto.campo] = ec.value;
     });
@@ -983,6 +994,16 @@ function confirmacion(def, valores) {
   return marco(def.titulo, cuerpo);
 }
 
+/** ¿Este registro mueve el stock? Los tipos los dice la planilla. */
+function mueveStock(registro) {
+  if (registro.hoja === 'Movimientos' || registro.hoja === 'Recuentos') return true;
+  if (registro.hoja === 'Sanidad') {
+    var sinStock = (CAT && CAT.tipos_sanidad_sin_stock) || [];
+    return sinStock.indexOf(registro.tipo) < 0;
+  }
+  return false;
+}
+
 /** Pantalla verde y vuelta sola al inicio. */
 async function guardarRegistro(def, valores) {
   var registro = {id: uuid(), hoja: def.tipo, fecha: valores.fecha, nota: valores.nota || ''};
@@ -1001,9 +1022,70 @@ async function guardarRegistro(def, valores) {
     ? 'Se está mandando a la planilla' : 'Se manda cuando haya señal'));
   RAIZ.appendChild(tapa);
 
-  await encolarGuardar(registro);
+  // Si el registro mueve hacienda y hay señal, esperamos la respuesta de la
+  // planilla para mostrar cómo quedó el potrero. Sin señal, como siempre.
+  if (mueveStock(registro) && navigator.onLine) {
+    await encolarGuardar(registro, true);
+    try {
+      await sincronizar(true);
+    } catch (e) {}
+    var estado = ESTADO_STOCK_POR_ID[registro.id];
+    delete ESTADO_STOCK_POR_ID[registro.id];
+    if (estado && estado.potreros && estado.potreros.length) {
+      PILA = [{nombre: 'inicio', datos: {}}];
+      ir('comoQuedo', {estado: estado});
+      return;
+    }
+  } else {
+    await encolarGuardar(registro);
+  }
   setTimeout(alInicio, 1300);
 }
+
+/** Cómo quedó el potrero después de guardar, con los datos de la planilla. */
+PANTALLAS.comoQuedo = function (datos) {
+  var estado = datos.estado || {potreros: [], revisar: []};
+  var hayQueRevisar = (estado.revisar || []).length > 0;
+  var cuerpo = [];
+
+  cuerpo.push(el('div', 'estado ok', '✓ Guardado'));
+
+  (estado.revisar || []).forEach(function (t) {
+    cuerpo.push(el('div', 'falta', 'Revisar: ' + t));
+  });
+
+  estado.potreros.forEach(function (p) {
+    var grupo = el('div', 'grupo-potrero');
+    grupo.appendChild(el('h3', null, p.potrero));
+    var datosP = datosPotrero(p.potrero);
+    if (datosP && datosP.hectareas) {
+      grupo.appendChild(el('div', 'sub', numeroLindo(datosP.hectareas) + ' ha'));
+    }
+    if (!p.grupos.length) {
+      grupo.appendChild(el('div', 'sub', 'Quedó sin hacienda'));
+    }
+    p.grupos.forEach(function (g) {
+      var linea = el('div', 'linea');
+      linea.appendChild(el('span', null, g.categoria + ' · ' + g.dueno));
+      var b = el('b', null, String(g.cabezas));
+      if (g.cabezas < 0) b.style.color = '#b71c1c';
+      linea.appendChild(b);
+      grupo.appendChild(linea);
+    });
+    cuerpo.push(grupo);
+  });
+
+  cuerpo.push(boton('LISTO', alInicio, 'ancho'));
+
+  // Si no hay nada raro, vuelve sola: no le agregamos un toque a cada carga.
+  if (!hayQueRevisar) {
+    setTimeout(function () {
+      var actual = PILA[PILA.length - 1];
+      if (actual && actual.nombre === 'comoQuedo') alInicio();
+    }, 8000);
+  }
+  return marco('Cómo quedó', cuerpo, {alVolver: alInicio});
+};
 
 // ===========================================================================
 // 12. Los seis formularios
@@ -1168,13 +1250,25 @@ function defPesada() {
 
 function defSanidad() {
   return {
-    tipo: 'Sanidad',
-    titulo: 'Sanidad',
+    tipo: 'Sanidad',      // el nombre de la hoja no cambia
+    titulo: 'Manejo',
     campos: ['potrero', 'tipo', 'categoria', 'categoria_destino', 'dueno',
       'cabezas', 'causa_producto'],
     conFoto: true,
-    textoCorto: {campo: 'causa_producto', etiqueta: 'Causa o producto (si querés)',
-      ejemplo: 'empaste, aftosa, mancha...'},
+    textoCorto: {
+      campo: 'causa_producto',
+      etiqueta: function (v) {
+        if (v.tipo === 'Inseminación' || v.tipo === 'Tacto') {
+          return 'Detalle (toro / pajuela / resultado)';
+        }
+        return 'Causa o producto (si querés)';
+      },
+      ejemplo: function (v) {
+        if (v.tipo === 'Inseminación') return 'toro, pajuela...';
+        if (v.tipo === 'Tacto') return 'resultado del tacto...';
+        return 'empaste, aftosa, mancha...';
+      }
+    },
     pasos: [
       {campo: 'tipo', tipo: 'opciones', pregunta: '¿Qué pasó?', columnas: 1,
         opciones: function () { return (CAT && CAT.tipos_sanidad) || []; }},
@@ -1200,6 +1294,9 @@ function defSanidad() {
       if (v.tipo === 'Tratamiento') return 'Tratamiento a ' + que + donde;
       if (v.tipo === 'Vacunación') return 'Vacunación de ' + que + donde;
       if (v.tipo === 'Capada de terneros') return 'Se caparon ' + que + donde;
+      if (v.tipo === 'Inseminación') return 'Se inseminaron ' + que + donde;
+      if (v.tipo === 'Tacto') return 'Se tactaron ' + que + donde;
+      if (v.tipo === 'Servicio con toro') return 'Servicio con toro a ' + que + donde;
       if (v.tipo === 'Cambio de categoría') {
         return que + donde + ' pasan a ' + (v.categoria_destino || '').toLowerCase();
       }

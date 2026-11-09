@@ -529,6 +529,260 @@ titulo('18. Una planilla que ya tenía el valor mal guardado se arregla sola');
     'la reparación corre una sola vez');
 }
 
+const HOY = new Date().toISOString().slice(0, 10);
+const haceDiasISO = n => {
+  const d = new Date(Date.now() - n * 86400000);
+  return d.toISOString().slice(0, 10);
+};
+const diasEntre = (desde, hasta) => Math.round(
+  (new Date(hasta + 'T12:00:00Z') - new Date(desde + 'T12:00:00Z')) / 86400000);
+
+titulo('19. Hoja Descanso: un potrero que se vacía y otro ocupado');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const entrada = haceDiasISO(20);
+  const salida = haceDiasISO(4);
+
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'd1', hoja: 'Recuentos', fecha: entrada, cargado_en: entrada + 'T09:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 40 },
+    { id: 'd2', hoja: 'Movimientos', fecha: salida, cargado_en: salida + 'T09:00:00',
+      potrero_origen: campo.P1, potrero_destino: campo.P2, categoria: campo.C1,
+      dueno: campo.D1, cabezas: 40, motivo: 'Rotación' }
+  ] });
+  ctx.escribirCalculos_(false);
+
+  const filas = ctx.leerHoja_('Descanso');
+  const vacio = filas.find(f => f.potrero === campo.P1);
+  const ocupado = filas.find(f => f.potrero === campo.P2);
+
+  ok(!!vacio && vacio.ocupado === 'no', 'el potrero que se vació figura como no ocupado',
+    vacio ? vacio.ocupado : 'no está');
+  ok(vacio && vacio.cabezas_hoy === 0, 'sin cabezas', String(vacio && vacio.cabezas_hoy));
+  ok(vacio && vacio.ultima_salida === salida,
+    'con la fecha en que quedó vacío', String(vacio && vacio.ultima_salida));
+  ok(vacio && vacio.dias_descanso === diasEntre(salida, HOY),
+    'y los días de descanso bien contados',
+    vacio ? vacio.dias_descanso + ' días' : '');
+  ok(vacio && vacio.dias_ocupado === '', 'no dice días de ocupación');
+
+  ok(!!ocupado && ocupado.ocupado === 'sí', 'el potrero que recibió figura como ocupado');
+  ok(ocupado && ocupado.cabezas_hoy === 40, 'con sus 40 cabezas',
+    String(ocupado && ocupado.cabezas_hoy));
+  ok(ocupado && ocupado.dias_ocupado === diasEntre(salida, HOY),
+    'y los días que lleva ocupado', ocupado ? ocupado.dias_ocupado + ' días' : '');
+  ok(ocupado && ocupado.dias_descanso === '' && ocupado.ultima_salida === '',
+    'sin días de descanso mientras está ocupado');
+
+  const nuncaUsado = filas.find(f => f.potrero !== campo.P1 && f.potrero !== campo.P2);
+  ok(!!nuncaUsado && nuncaUsado.ocupado === 'no' && nuncaUsado.dias_descanso === '',
+    'un potrero que nunca se usó aparece vacío y sin días',
+    nuncaUsado ? nuncaUsado.potrero : 'no hay');
+  ok(filas.length >= campo.potrerosSembrados,
+    'están todos los potreros de la planilla', filas.length + ' filas');
+}
+
+titulo('20. Al guardar, la respuesta dice cómo quedó el potrero');
+{
+  const campo = nuevoCampo();
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'e0', hoja: 'Recuentos', fecha: '2026-11-01', cargado_en: '2026-11-01T09:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 50 }
+  ] });
+
+  const r = campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'e1', hoja: 'Movimientos', fecha: '2026-11-02', cargado_en: '2026-11-02T09:00:00',
+      potrero_origen: campo.P1, potrero_destino: campo.P2, categoria: campo.C1,
+      dueno: campo.D1, cabezas: 20, motivo: 'Rotación' }
+  ] });
+
+  const est = r.estado_stock;
+  ok(!!est, 'la respuesta trae el estado del stock');
+  ok(est && est.potreros.length === 2, 'con el potrero de salida y el de llegada',
+    est ? est.potreros.map(p => p.potrero).join(', ') : '');
+  const origen = est && est.potreros.find(p => p.potrero === campo.P1);
+  const destino = est && est.potreros.find(p => p.potrero === campo.P2);
+  ok(origen && origen.grupos[0].cabezas === 30, 'en el de salida quedan 30',
+    origen ? String(origen.grupos[0].cabezas) : '');
+  ok(destino && destino.grupos[0].cabezas === 20, 'y en el de llegada 20');
+  ok(origen && origen.grupos[0].categoria === campo.C1 &&
+     origen.grupos[0].dueno === campo.D1, 'con la categoría y el dueño');
+  ok(est && est.revisar.length === 0, 'y nada para revisar');
+
+  ok(!('_guardados' in r), 'la respuesta no filtra datos internos');
+}
+
+titulo('21. Si algo queda en negativo, la respuesta lo marca para revisar');
+{
+  const campo = nuevoCampo();
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'n0', hoja: 'Recuentos', fecha: '2026-11-01', cargado_en: '2026-11-01T09:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 5 }
+  ] });
+  const r = campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'n1', hoja: 'Sanidad', fecha: '2026-11-02', cargado_en: '2026-11-02T09:00:00',
+      potrero: campo.P1, tipo: 'Muerte', categoria: campo.C1, dueno: campo.D1,
+      cabezas: 8, causa_producto: 'rayo' }
+  ] });
+  const est = r.estado_stock;
+  ok(est && est.potreros[0].grupos[0].cabezas === -3, 'el grupo queda en -3',
+    est ? String(est.potreros[0].grupos[0].cabezas) : '');
+  ok(est && est.revisar.length === 1 && /-3/.test(est.revisar[0]) &&
+     /Contá ese potrero/.test(est.revisar[0]),
+    'y sale una línea para revisar', est ? est.revisar[0] : '');
+}
+
+titulo('22. El alta automática también se avisa al guardar');
+{
+  const campo = nuevoCampo();
+  const r = campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'a1', hoja: 'Movimientos', fecha: '2026-11-02', cargado_en: '2026-11-02T09:00:00',
+      potrero_origen: campo.P1, potrero_destino: campo.P2, categoria: campo.C1,
+      dueno: campo.D1, cabezas: 12, motivo: 'Rotación' }
+  ] });
+  const est = r.estado_stock;
+  ok(est && est.revisar.length === 1 && /Se dieron de alta 12/.test(est.revisar[0]),
+    'avisa que se dieron de alta solas', est ? est.revisar[0] : '');
+}
+
+titulo('23. Manejo: inseminación, tacto y servicio con toro');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const tipos = ctx.catalogos_().tipos_sanidad;
+  ['Inseminación', 'Tacto', 'Servicio con toro'].forEach(t => {
+    ok(tipos.indexOf(t) >= 0, 'la app ofrece "' + t + '"');
+  });
+  ok(ctx.catalogos_().tipos_sanidad_sin_stock.indexOf('Inseminación') >= 0,
+    'y sabe que no mueven stock');
+
+  // Las dos filas que ya están cargadas a mano en la planilla.
+  campo.pegar('Recuentos', [
+    { id: 'base-1', fecha: '2026-11-05', potrero: '1i', categoria: campo.C1,
+      dueno: campo.D1, cabezas: 141, origen_carga: 'Carga histórica', estado: 'activo' }
+  ]);
+  campo.pegar('Sanidad', [
+    { id: 'ins-1', fecha: '2026-11-06', potrero: '1i', tipo: 'Inseminación',
+      categoria: campo.C1, dueno: campo.D1, cabezas: 141,
+      causa_producto: 'toro 1', origen_carga: 'Carga histórica', estado: 'activo' },
+    { id: 'ins-2', fecha: '2026-11-06', potrero: '1i', tipo: 'Inseminación',
+      categoria: campo.C1, dueno: campo.D2, cabezas: 27,
+      causa_producto: 'toro 2', origen_carga: 'Carga histórica', estado: 'activo' }
+  ]);
+  const s = campo.stock();
+  ok(s.get('1i|' + campo.C1 + '|' + campo.D1) === 141,
+    'las inseminaciones no tocan el stock',
+    String(s.get('1i|' + campo.C1 + '|' + campo.D1)));
+  ok(s.get('1i|' + campo.C1 + '|' + campo.D2) === undefined,
+    'ni dan de alta hacienda que no estaba');
+  ok(campo.libreta(campo.D2).length === 0,
+    'ni ensucian la libreta del cliente');
+
+  const r = campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'ins-3', hoja: 'Sanidad', fecha: '2026-11-07', cargado_en: '2026-11-07T09:00:00',
+      potrero: '1i', tipo: 'Tacto', categoria: campo.C1, dueno: campo.D1,
+      cabezas: 141, causa_producto: '120 preñadas' }
+  ] });
+  ok(r.resultados[0].estado === 'guardado', 'un tacto cargado desde la app entra bien',
+    r.resultados[0].mensaje || '');
+  ok(!r.estado_stock, 'y no muestra pantalla de stock, porque no lo mueve');
+}
+
+titulo('24. Un potrero dado de baja no le aparece al encargado');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const h = ctx.hoja_('Potreros', []);
+  const filas = ctx.leerHoja_('Potreros');
+  const baja = filas[1];
+  // La columna activo se edita a mano: puede decir "no", "No", "NO" o "false".
+  ['no', 'No', 'NO', 'false', 'baja'].forEach(valor => {
+    h.getRange(baja._fila, 5).setValue(valor);
+    const ids = ctx.catalogos_().potreros.map(p => p.id);
+    ok(ids.indexOf(baja.id) < 0, 'con activo = "' + valor + '" no aparece en la grilla');
+  });
+  h.getRange(baja._fila, 5).setValue('sí');
+  ok(ctx.catalogos_().potreros.map(p => p.id).indexOf(baja.id) >= 0,
+    'y vuelve a aparecer si se le pone sí');
+
+  // Pero si tiene hacienda, el stock y Descanso lo siguen mostrando.
+  h.getRange(baja._fila, 5).setValue('no');
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'b1', hoja: 'Recuentos', fecha: '2026-11-02', cargado_en: '2026-11-02T09:00:00',
+      potrero: baja.id, categoria: campo.C1, dueno: campo.D1, cabezas: 4 }
+  ] });
+  ok(campo.stock().get(baja.id + '|' + campo.C1 + '|' + campo.D1) === 4,
+    'la hacienda que quedó ahí se sigue viendo en el stock');
+  ctx.escribirCalculos_(false);
+  const enDescanso = ctx.leerHoja_('Descanso').find(f => f.potrero === baja.id);
+  ok(!!enDescanso && enDescanso.cabezas_hoy === 4,
+    'y en Descanso también, para que no se olvide');
+}
+
+titulo('25. Parte semanal');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'p1', hoja: 'Recuentos', fecha: haceDiasISO(5), cargado_en: haceDiasISO(5) + 'T09:00:00',
+      potrero: campo.P1, categoria: campo.C1, dueno: campo.D1, cabezas: 60 },
+    { id: 'p2', hoja: 'Lluvias', fecha: haceDiasISO(3), cargado_en: haceDiasISO(3) + 'T09:00:00',
+      mm: 18, lugar: 'Casa' },
+    { id: 'p3', hoja: 'Lluvias', fecha: haceDiasISO(1), cargado_en: haceDiasISO(1) + 'T09:00:00',
+      mm: 12, lugar: 'Casa' },
+    { id: 'p4', hoja: 'Recorridas', fecha: haceDiasISO(2), cargado_en: haceDiasISO(2) + 'T09:00:00',
+      potrero: campo.P1, agua: 'Sin agua', alambre: 'Roto', pasto: '1 Poco' },
+    { id: 'p5', hoja: 'Recorridas', fecha: haceDiasISO(2), cargado_en: haceDiasISO(2) + 'T09:05:00',
+      potrero: campo.P2, agua: 'Bien', alambre: 'Bien', pasto: '2 Normal' },
+    { id: 'p6', hoja: 'Movimientos', fecha: haceDiasISO(1), cargado_en: haceDiasISO(1) + 'T10:00:00',
+      potrero_origen: campo.P2, potrero_destino: campo.P1, categoria: campo.C1,
+      dueno: campo.D2, cabezas: 9, motivo: 'Rotación' }
+  ] });
+  // Algo viejo, que no tiene que salir en el parte.
+  campo.pegar('Lluvias', [{ id: 'viejo', fecha: haceDiasISO(30), mm: 99,
+    lugar: 'Casa', origen_carga: 'App', estado: 'activo' }]);
+
+  const p = ctx.parteSemanal_();
+  ok(p.mmSemana === 30, 'suma los milímetros de la semana', p.mmSemana + ' mm');
+  ok(p.totalRegistros === 6, 'cuenta sólo los de los últimos 7 días',
+    p.totalRegistros + ' registros');
+  ok(Object.keys(p.quienes).some(q => /Nahuel/.test(q)),
+    'dice quién cargó y desde qué dispositivo', Object.keys(p.quienes).join(', '));
+  ok(p.sinNada.length >= 1, 'marca los días sin nada anotado',
+    p.sinNada.length + ' días');
+  ok(p.paraRevisar.some(t => /Alta automática/.test(t)),
+    'pone el alta automática para revisar', p.paraRevisar.join(' | '));
+  ok(p.totalCabezas === 69, 'da el stock total', p.totalCabezas + ' cabezas');
+
+  const html = ctx.parteEnHtml_(p);
+  ok(/Parte semanal del campo/.test(html), 'el HTML tiene título');
+  ok(/Para revisar/.test(html), 'y la sección para revisar');
+  ok(/Sin agua/.test(html), 'incluye la recorrida con problemas');
+  ok(!/agua Bien, alambre Bien/.test(html),
+    'y deja afuera la recorrida que estaba toda bien');
+  ok(/30 mm/.test(html), 'muestra la lluvia de la semana');
+  ok(/Total en el campo/.test(html), 'y el total de hacienda');
+  ok(!/99/.test(html), 'no se cuela la lluvia vieja');
+
+  // Ojo: ya hay mails de los avisos de cada envío, así que miramos los del parte.
+  const partes = () => campo.mails.filter(m => /^Parte semanal/.test(m.asunto));
+
+  const sinMail = ctx.mandarParteSemanal();
+  ok(sinMail.mandado === false && partes().length === 0,
+    'sin mail_parte no manda nada', sinMail.motivo);
+
+  campo.config('mail_parte', 'dueno@ejemplo.com');
+  const conMail = ctx.mandarParteSemanal();
+  ok(conMail.mandado === true && partes().length === 1,
+    'con mail_parte sí lo manda', partes().length + ' parte(s)');
+  ok(partes()[0].html && /Parte semanal/.test(partes()[0].html),
+    'y va en HTML', partes()[0].asunto);
+  ok(partes()[0].para === 'dueno@ejemplo.com', 'a quien dice la configuración',
+    partes()[0].para);
+}
+
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'
   : '✗ ' + fallas + ' prueba(s) fallaron.'));
 process.exit(fallas === 0 ? 0 : 1);

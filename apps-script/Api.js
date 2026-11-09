@@ -101,8 +101,9 @@ function doGet(e) {
 }
 
 function catalogos_() {
+  // Un potrero dado de baja no tiene que aparecer en la grilla de la app.
   var potreros = leerHoja_(HOJA.POTREROS)
-    .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no'; })
+    .filter(function (f) { return estaActivo_(f.activo); })
     .map(function (f) {
       return {
         id: texto_(f.id),
@@ -117,12 +118,12 @@ function catalogos_() {
     return n > 0 ? n : 9999;
   };
   var duenos = leerHoja_(HOJA.DUENOS)
-    .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no'; })
+    .filter(function (f) { return estaActivo_(f.activo); })
     .sort(function (a, b) { return orden_(a) - orden_(b); })
     .map(function (f) { return texto_(f.dueno); })
     .filter(function (d) { return d; });
   var categorias = leerHoja_(HOJA.CATEGORIAS)
-    .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no'; })
+    .filter(function (f) { return estaActivo_(f.activo); })
     .sort(function (a, b) { return orden_(a) - orden_(b); })
     .map(function (f) { return texto_(f.categoria); })
     .filter(function (c) { return c; });
@@ -130,7 +131,7 @@ function catalogos_() {
   // Avisos para el encargado: se cargan a mano en la hoja Avisos y se ven
   // arriba de todo en la pantalla de inicio hasta que se ponen en "no".
   var avisos = leerHoja_(HOJA.AVISOS)
-    .filter(function (f) { return texto_(f.activo).toLowerCase() !== 'no' && texto_(f.mensaje); })
+    .filter(function (f) { return estaActivo_(f.activo) && texto_(f.mensaje); })
     .map(function (f) { return texto_(f.mensaje); });
 
   return {
@@ -139,6 +140,7 @@ function catalogos_() {
     avisos: avisos,
     categorias: categorias,
     tipos_sanidad: TIPOS_SANIDAD,
+    tipos_sanidad_sin_stock: TIPOS_SANIDAD_SIN_STOCK,
     motivos: MOTIVOS_MOVIMIENTO,
     lugares_lluvia: LUGARES_LLUVIA,
     entrada_campo: ENTRADA_CAMPO,
@@ -209,11 +211,15 @@ function doPost(e) {
 
     if (respuesta.cambio) {
       try {
-        escribirCalculos_(false);
+        var calculo = escribirCalculos_(false);
+        if (accion === 'guardar') {
+          respuesta.estado_stock = estadoStockDe_(respuesta._guardados || [], calculo);
+        }
       } catch (err) {
         respuesta.aviso = 'Guardado, pero el stock se recalcula más tarde';
       }
     }
+    delete respuesta._guardados;
     return json_(respuesta);
   } catch (err) {
     return error_(String(err && err.message ? err.message : err), 'interno');
@@ -245,6 +251,7 @@ function guardarRegistros_(registros, dispositivo, persona) {
   var porTipo = {};
   var repetidos = 0, guardados = 0;
   var avisar = [];
+  var guardadosDatos = [];
 
   registros.forEach(function (r) {
     // "hoja" es a qué hoja va el registro. No se llama "tipo" porque Sanidad
@@ -290,6 +297,7 @@ function guardarRegistros_(registros, dispositivo, persona) {
       datos.dispositivo = texto_(r.dispositivo) || dispositivo;
       datos.origen_carga = texto_(r.origen_carga) || 'App';
       datos.estado = 'activo';
+      guardadosDatos.push(Object.assign({hoja: tipo}, datos));
       filas.push(ESQUEMA[tipo].map(function (col) {
         var v = datos[col];
         return (v === undefined || v === null) ? '' : v;
@@ -309,7 +317,8 @@ function guardarRegistros_(registros, dispositivo, persona) {
   registrarLog_('guardar', persona, dispositivo, registros.length, guardados,
     repetidos, '');
   avisarRegistros_(avisar, persona, dispositivo);
-  return {ok: true, resultados: resultados, cambio: guardados > 0};
+  return {ok: true, resultados: resultados, cambio: guardados > 0,
+    _guardados: guardadosDatos};
 }
 
 /** Marca un registro como borrado (no se borra la fila). */
@@ -353,6 +362,56 @@ function editarRegistro_(tipo, id, campos) {
     })]);
   registrarLog_('editar', '', '', 1, 1, 0, tipo + ' ' + id);
   return {ok: true, cambio: true};
+}
+
+/**
+ * Cómo quedaron los potreros que tocó este envío, para mostrarlo en el
+ * celular apenas se guarda. Sale del cálculo de verdad, no de una cuenta
+ * hecha en el teléfono.
+ */
+function estadoStockDe_(guardados, calculo) {
+  var potreros = [];
+  var ids = {};
+  guardados.forEach(function (r) {
+    ids[texto_(r.id)] = true;
+    var hoja = texto_(r.hoja);
+    var toca = [];
+    if (hoja === HOJA.MOVIMIENTOS) {
+      toca = [texto_(r.potrero_origen), texto_(r.potrero_destino)];
+    } else if (hoja === HOJA.RECUENTOS) {
+      toca = [texto_(r.potrero)];
+    } else if (hoja === HOJA.SANIDAD &&
+        TIPOS_SANIDAD_SIN_STOCK.indexOf(texto_(r.tipo)) < 0) {
+      toca = [texto_(r.potrero)];
+    }
+    toca.forEach(function (p) {
+      if (!p || p === ENTRADA_CAMPO || p === SALIDA_CAMPO) return;
+      if (potreros.indexOf(p) < 0) potreros.push(p);
+    });
+  });
+  if (!potreros.length) return null;
+
+  var revisar = [];
+  var salida = potreros.map(function (p) {
+    var grupos = calculo.stock.filter(function (s) { return s.potrero === p; })
+      .map(function (s) {
+        if (s.cabezas < 0) {
+          revisar.push('El ' + p + ' quedó en ' + s.cabezas + ' ' + s.categoria +
+            ' de ' + s.dueno + '. Contá ese potrero.');
+        }
+        return {categoria: s.categoria, dueno: s.dueno, cabezas: s.cabezas};
+      });
+    return {potrero: p, grupos: grupos};
+  });
+
+  (calculo.altas || []).forEach(function (a) {
+    if (!ids[texto_(a.id)]) return;
+    revisar.push('Se dieron de alta ' + a.cabezas + ' ' + a.categoria + ' de ' +
+      a.dueno + ' en el ' + a.potrero + ': se movieron ' + a.movidas +
+      ' y había ' + a.habia + ' cargadas. Contá ese potrero.');
+  });
+
+  return {potreros: salida, revisar: revisar};
 }
 
 // ---------------------------------------------------------------------------

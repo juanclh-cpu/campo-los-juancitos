@@ -26,8 +26,10 @@ function instalar() {
   try {
     crearDisparadorDiario();
     crearDisparadorInactividad();
+    crearDisparadorParte();
     lineas.push('Recálculo automático: todas las noches a las 22.');
     lineas.push('Aviso por inactividad: todas las mañanas a las 9.');
+    lineas.push('Parte semanal: los sábados a las 8.');
   } catch (e) {
     lineas.push('Sin tareas automáticas (falta el permiso de disparadores): ' +
       'usá el menú para recalcular.');

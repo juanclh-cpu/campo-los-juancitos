@@ -7,7 +7,7 @@
 
    VERSION hay que subirla en cada cambio: eso es lo que hace que el navegador
    se dé cuenta de que este archivo cambió y tire la copia vieja. */
-var VERSION = 'v6';
+var VERSION = 'v7';
 var CACHE = 'campo-' + VERSION;
 var ARCHIVOS = [
   './', 'index.html', 'estilos.css', 'app.js', 'manifest.webmanifest',

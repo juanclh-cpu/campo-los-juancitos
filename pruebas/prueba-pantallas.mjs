@@ -59,10 +59,24 @@ async function foto(pagina, nombre) {
   await pagina.screenshot({ path: CAPTURAS + '/' + nombre + '.png' });
 }
 
+/**
+ * Espera a volver al inicio. Si el registro movió hacienda, antes pasa por la
+ * pantalla que muestra cómo quedó el potrero: la cerramos con LISTO.
+ */
 async function volverAlInicio(pagina) {
-  await pagina.waitForFunction(() => /STOCK/.test(document.body.textContent),
-    { timeout: 10000 });
+  await pagina.waitForFunction(
+    () => /STOCK/.test(document.body.textContent) ||
+          /Cómo quedó/.test(document.body.textContent),
+    { timeout: 20000 });
+  const enComoQuedo = await pagina.evaluate(() =>
+    /Cómo quedó/.test(document.body.textContent));
+  if (enComoQuedo) {
+    await tocar(pagina, 'LISTO', 'exacto');
+    await pagina.waitForFunction(() => /STOCK/.test(document.body.textContent),
+      { timeout: 10000 });
+  }
   await dormir(200);
+  return enComoQuedo;
 }
 
 function filasDe(planilla, hoja) {
@@ -146,6 +160,15 @@ async function principal() {
     await tocar(pagina, 'LISTO', 'exacto');
     await foto(pagina, '08-confirmar-contar');
     await tocar(pagina, 'GUARDAR', 'exacto');
+    await pagina.waitForFunction(() => /Cómo quedó/.test(document.body.textContent),
+      { timeout: 20000 });
+    await foto(pagina, '08b-como-quedo');
+    const comoQuedo = await pagina.evaluate(() => document.body.innerText);
+    ok(comoQuedo.indexOf(P1) >= 0 && /30/.test(comoQuedo),
+      'después de contar muestra cómo quedó el potrero, con los datos de la planilla',
+      comoQuedo.replace(/\n+/g, ' | ').slice(0, 90));
+    ok(!/Revisar:/.test(comoQuedo), 'y sin nada para revisar');
+    await tocar(pagina, 'LISTO', 'exacto');
     await volverAlInicio(pagina);
 
     console.log('\n3. Mover hacienda');
@@ -158,6 +181,13 @@ async function principal() {
     await tocar(pagina, 'LISTO', 'exacto');
     await foto(pagina, '09-confirmar-mover');
     await tocar(pagina, 'GUARDAR', 'exacto');
+    await pagina.waitForFunction(() => /Cómo quedó/.test(document.body.textContent),
+      { timeout: 20000 });
+    const trasMover = await pagina.evaluate(() => document.body.innerText);
+    ok(trasMover.indexOf(P1) >= 0 && trasMover.indexOf(P2) >= 0,
+      'después de mover muestra el potrero de salida y el de llegada',
+      P1 + ' y ' + P2);
+    await tocar(pagina, 'LISTO', 'exacto');
     await volverAlInicio(pagina);
     await foto(pagina, '10-inicio-con-repetir');
 
@@ -176,9 +206,9 @@ async function principal() {
     await tocar(pagina, 'GUARDAR', 'exacto');
     await volverAlInicio(pagina);
 
-    console.log('\n5. Sanidad');
-    await tocar(pagina, 'Sanidad');
-    await foto(pagina, '12-sanidad-que-paso');
+    console.log('\n5. Manejo');
+    await tocar(pagina, 'Manejo');
+    await foto(pagina, '12-manejo-que-paso');
     await tocar(pagina, 'Nacimiento', 'exacto');
     await tocar(pagina, P4, 'potrero');
     await tocar(pagina, CAT_CRIA, 'exacto');

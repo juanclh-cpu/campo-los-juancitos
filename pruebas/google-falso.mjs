@@ -189,14 +189,25 @@ export function crearEntorno() {
     ScriptApp: {
       getService: () => ({ getUrl: () => 'http://localhost:8787/api' }),
       getProjectTriggers: () => [],
+      WeekDay: { SATURDAY: 'sábado' },
       newTrigger: () => ({
-        timeBased: () => ({ atHour: () => ({ everyDays: () => ({ create: () => {} }) }) })
+        timeBased: () => ({
+          atHour: () => ({ everyDays: () => ({ create: () => {} }), create: () => {} }),
+          onWeekDay: () => ({ atHour: () => ({ create: () => {} }) })
+        })
       }),
       deleteTrigger: () => {}
     },
     HtmlService: { createHtmlOutput: () => ({ setWidth: () => ({ setHeight: () => ({}) }) }) },
     MailApp: {
-      sendEmail: (para, asunto, cuerpo) => { mails.push({ para, asunto, cuerpo }); }
+      sendEmail: (para, asunto, cuerpo) => {
+        if (para && typeof para === 'object') {
+          mails.push({ para: para.to, asunto: para.subject,
+            cuerpo: para.body || '', html: para.htmlBody || '' });
+        } else {
+          mails.push({ para, asunto, cuerpo, html: '' });
+        }
+      }
     }
   };
 
@@ -214,8 +225,8 @@ export function crearEntorno() {
 
   vm.createContext(contexto);
   const dir = path.resolve('apps-script');
-  ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Api.js', 'Menu.js',
-    'Instalar.js', 'Semilla.js']
+  ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Parte.js', 'Api.js',
+    'Menu.js', 'Instalar.js', 'Semilla.js']
     .forEach(f => {
       vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), contexto, { filename: f });
     });

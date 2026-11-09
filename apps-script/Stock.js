@@ -100,6 +100,8 @@ function calcularTodo_(conDiario) {
   var libretas = {};   // dueño -> filas
   var ultimoEvento = {}; // dueño+cat -> fecha
   var diario = [];
+  var altas = [];      // altas automáticas, para poder avisarlas
+  var ocupacion = {};  // potrero -> desde cuándo está ocupado y cuándo se vació
   var fechaCursor = null;
 
   function grupo_(potrero, categoria, dueno) {
@@ -142,6 +144,37 @@ function calcularTodo_(conDiario) {
       ingreso: ingreso || '', egreso: egreso || '', muertes: muertes || '',
       stock: total_(categoria, dueno), potrero: potrero || '',
       comentario: comentario || '', id: ev.id
+    });
+  }
+
+  /** Cabezas que hay hoy en un potrero, sumando todas las categorías. */
+  function cabezasEn_(potrero) {
+    var t = 0;
+    Object.keys(stock).forEach(function (k) {
+      if (stock[k].potrero === potrero) t += stock[k].cabezas;
+    });
+    return t;
+  }
+
+  /**
+   * Anota cuándo un potrero se llenó y cuándo se vació. Es la misma historia
+   * de ocupación que arma el diario, pero sin tener que recorrerlo después:
+   * así la hoja Descanso se puede calcular en cada recálculo, no sólo de noche.
+   */
+  function revisarOcupacion_(potreros, fecha) {
+    potreros.forEach(function (p) {
+      if (!p || p === ENTRADA_CAMPO || p === SALIDA_CAMPO) return;
+      if (!ocupacion[p]) ocupacion[p] = {ocupado: false, desde: '', ultimaSalida: ''};
+      var o = ocupacion[p];
+      var hayHacienda = cabezasEn_(p) > 0;
+      if (hayHacienda && !o.ocupado) {
+        o.ocupado = true;
+        o.desde = fecha;
+      } else if (!hayHacienda && o.ocupado) {
+        o.ocupado = false;
+        o.desde = '';
+        o.ultimaSalida = fecha;
+      }
     });
   }
 
@@ -193,6 +226,9 @@ function calcularTodo_(conDiario) {
         var falta = e.cabezas - habia;
         if (falta > 0) {
           sumar_(e.origen, e.categoria, e.dueno, falta, e.fecha);
+          altas.push({id: e.id, fecha: e.fecha, potrero: e.origen,
+            categoria: e.categoria, dueno: e.dueno, cabezas: falta,
+            movidas: e.cabezas, habia: habia});
           anotar_(e, e.dueno, e.categoria, falta, '', '', e.origen,
             'Alta automática: se movieron ' + e.cabezas + ' desde ' + e.origen +
             ' y había ' + habia + ' cargadas. Confirmar con un recuento.');
@@ -227,6 +263,9 @@ function calcularTodo_(conDiario) {
         anotar_(e, e.dueno, e.categoria_destino, e.cabezas, '', '', e.potrero, txt);
       }
     }
+
+    revisarOcupacion_(e.clase === 'movimiento' ? [e.origen, e.destino] : [e.potrero],
+      e.fecha);
   }
 
   if (conDiario && fechaCursor !== null) {
@@ -240,8 +279,13 @@ function calcularTodo_(conDiario) {
 
   // Stock como lista, con lote, hectáreas y días de pastoreo
   var datosPotrero = {};
+  var ordenPotreros = [];
   leerHoja_(HOJA.POTREROS).forEach(function (f) {
-    datosPotrero[texto_(f.id)] = {lote: texto_(f.lote), ha: aNumero_(f.hectareas)};
+    var id = texto_(f.id);
+    if (!id) return;
+    datosPotrero[id] = {lote: texto_(f.lote), ha: aNumero_(f.hectareas),
+      uso: texto_(f.uso)};
+    ordenPotreros.push(id);
   });
 
   var listaStock = [];
@@ -288,5 +332,34 @@ function calcularTodo_(conDiario) {
     return (a.dueno + a.categoria).localeCompare(b.dueno + b.categoria);
   });
 
-  return {stock: listaStock, libretas: libretas, resumen: resumen, diario: diario};
+  // Descanso: cuántos días hace que cada potrero está vacío, o ocupado.
+  var vistosPotrero = {};
+  var listaDescanso = [];
+  function diasEntre_(desde) {
+    return Math.round((new Date(hoy + 'T12:00:00Z') -
+      new Date(desde + 'T12:00:00Z')) / 86400000);
+  }
+  function filaDescanso_(potrero) {
+    if (vistosPotrero[potrero]) return;
+    vistosPotrero[potrero] = true;
+    var p = datosPotrero[potrero] || {lote: '', ha: '', uso: ''};
+    var o = ocupacion[potrero] || {ocupado: false, desde: '', ultimaSalida: ''};
+    var cabezas = cabezasEn_(potrero);
+    var ocupado = cabezas > 0;
+    listaDescanso.push({
+      potrero: potrero, lote: p.lote, hectareas: p.ha, uso: p.uso,
+      ocupado: ocupado ? 'sí' : 'no',
+      cabezas_hoy: cabezas,
+      ultima_salida: ocupado ? '' : (o.ultimaSalida || ''),
+      dias_descanso: (!ocupado && o.ultimaSalida) ? diasEntre_(o.ultimaSalida) : '',
+      dias_ocupado: (ocupado && o.desde) ? diasEntre_(o.desde) : ''
+    });
+  }
+  // Primero los de la hoja Potreros, en su orden; después los que aparezcan
+  // en los registros sin estar en la lista.
+  ordenPotreros.forEach(filaDescanso_);
+  Object.keys(stock).forEach(function (k) { filaDescanso_(stock[k].potrero); });
+
+  return {stock: listaStock, libretas: libretas, resumen: resumen,
+    diario: diario, descanso: listaDescanso, altas: altas};
 }

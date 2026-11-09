@@ -38,6 +38,12 @@ function escribirCalculos_(conDiario) {
     return [r.dueno, r.categoria, r.cabezas, r.potreros, r.ultimo_evento, ahora];
   }));
 
+  // Descanso se recalcula siempre, igual que Stock: no necesita el diario.
+  volcar_(HOJA.DESCANSO, ESQUEMA_REF[HOJA.DESCANSO], c.descanso.map(function (d) {
+    return [d.potrero, d.lote, d.hectareas, d.uso, d.ocupado, d.cabezas_hoy,
+      d.ultima_salida, d.dias_descanso, d.dias_ocupado];
+  }));
+
   Object.keys(c.libretas).forEach(function (dueno) {
     volcar_(PREFIJO_LIBRETA + dueno, ESQUEMA_LIBRETA,
       c.libretas[dueno].map(function (f) {
@@ -64,7 +70,8 @@ function escribirCalculos_(conDiario) {
 function armarHojas_() {
   Object.keys(ESQUEMA).forEach(function (n) { hoja_(n, ESQUEMA[n]); });
   [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.STOCK, HOJA.DIARIO,
-    HOJA.RESUMEN, HOJA.CONFIG, HOJA.AVISOS, HOJA.LOG].forEach(function (n) {
+    HOJA.RESUMEN, HOJA.DESCANSO, HOJA.CONFIG, HOJA.AVISOS,
+    HOJA.LOG].forEach(function (n) {
     hoja_(n, ESQUEMA_REF[n]);
   });
   sembrarConfiguracion_();

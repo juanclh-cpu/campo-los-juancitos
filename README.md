@@ -85,6 +85,7 @@ npm i -g @google/clasp && clasp login
 | Recalcular stock y libretas | Rápido, sin el diario de ocupación. |
 | Recalcular todo | Incluye el diario de ocupación. |
 | Probar los avisos por mail | Manda un mail de prueba a los destinatarios configurados. |
+| Mandar parte semanal ahora | Manda el parte de los últimos 7 días sin esperar al sábado. |
 | Ver / Generar el código de activación | El enlace que se abre en el celular. |
 | Vaciar todos los registros | Borra todo lo cargado. Pide escribir BORRAR. No toca catálogos ni configuración. |
 
@@ -176,12 +177,16 @@ Claves de **Configuración**:
 | `mail_encargado` | Mail del encargado, sólo para el aviso de inactividad. |
 | `avisar_cada_registro` | `sí` o `no`: mail cada vez que llegan registros del celular. |
 | `dias_sin_registrar` | A los cuántos días sin registros avisar. Por defecto 5. |
+| `mail_parte` | A quién le llega el parte semanal de los sábados. Vacío: no se manda. |
+| `dias_descanso_max` | En el parte, avisar los potreros con más días de descanso. Por defecto 45. |
+| `dias_ocupado_max` | En el parte, avisar los potreros ocupados hace más días. Por defecto 7. |
 
 ### Hojas que calcula el script (no editar a mano: se reescriben enteras)
 
 | Hoja | Columnas |
 |---|---|
 | **Stock** | `potrero`, `lote`, `hectareas`, `categoria`, `dueno`, `cabezas`, `desde`, `dias`, `recalculado_en` |
+| **Descanso** | `potrero`, `lote`, `hectareas`, `uso`, `ocupado`, `cabezas_hoy`, `ultima_salida`, `dias_descanso`, `dias_ocupado` |
 | **Resumen stock** | `dueno`, `categoria`, `cabezas`, `potreros`, `ultimo_evento`, `recalculado_en` |
 | **Diario de ocupación** | `fecha`, `potrero`, `lote`, `hectareas`, `categoria`, `dueno`, `cabezas` |
 | **Libreta &lt;Dueño&gt;** | `Fecha`, `Categoría`, `Ingreso`, `Egreso`, `Muertes`, `Stock`, `Potrero`, `Comentarios / sanidad`, `id_registro` |
@@ -211,6 +216,10 @@ sin servicios de por medio.
   al encargado. Lo dispara un horario diario a las 9 y no insiste: espera tres
   días antes de repetirlo. La app además muestra un cartel en la pantalla
   principal cuando pasa ese tiempo sin cargar nada.
+- **Los sábados a las 8** sale el **parte semanal** en HTML a `mail_parte`: qué
+  pasó día por día con quién lo cargó, los días sin nada anotado, lo que hay
+  para revisar, el stock por cliente y los potreros pasados de descanso o de
+  ocupación. Para probarlo: *Mandar parte semanal ahora*.
 
 Para probarlos: **Campo Los Juancitos → Probar los avisos por mail**.
 
@@ -238,6 +247,16 @@ encargado mueve y después cuenta, manda el recuento.
 - **Los avisos para el encargado** se escriben a mano en la hoja Avisos y
   aparecen arriba de todo en la pantalla principal de la app hasta que se
   ponen en `no`.
+- **La pestaña se llama "Manejo" en la app, pero la hoja sigue siendo
+  "Sanidad".** Es sólo la etiqueta: el nombre de la hoja no cambia para no
+  romper lo que ya lee la planilla.
+- **Después de guardar algo que mueve hacienda**, la app muestra cómo quedó el
+  potrero con los números que devuelve la planilla, no con una cuenta hecha en
+  el teléfono. Si algo quedó en negativo o hubo un alta automática, lo marca en
+  rojo y espera a que lo lean; si está todo bien, vuelve sola a los 8 segundos.
+- **Un potrero con `activo` en `no` no aparece en la grilla** de la app, pero
+  sigue saliendo en Stock y en Descanso si tiene hacienda, para que no se
+  pierda de vista.
 - **Corregir = borrar y volver a cargar.** Más simple de explicar y deja el
   historial completo.
 - **Nada se borra de verdad.** Las filas borradas quedan con `estado` en

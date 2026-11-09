@@ -25,6 +25,7 @@ var HOJA = {
   STOCK: 'Stock',
   DIARIO: 'Diario de ocupación',
   RESUMEN: 'Resumen stock',
+  DESCANSO: 'Descanso',
   CONFIG: 'Configuración',
   AVISOS: 'Avisos',
   LOG: 'Log'
@@ -62,6 +63,8 @@ ESQUEMA_REF[HOJA.DIARIO] = ['fecha', 'potrero', 'lote', 'hectareas', 'categoria'
   'dueno', 'cabezas'];
 ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'potreros',
   'ultimo_evento', 'recalculado_en'];
+ESQUEMA_REF[HOJA.DESCANSO] = ['potrero', 'lote', 'hectareas', 'uso', 'ocupado',
+  'cabezas_hoy', 'ultima_salida', 'dias_descanso', 'dias_ocupado'];
 ESQUEMA_REF[HOJA.CONFIG] = ['clave', 'valor', 'qué es'];
 ESQUEMA_REF[HOJA.AVISOS] = ['fecha', 'mensaje', 'activo'];
 ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'persona', 'dispositivo',
@@ -75,8 +78,15 @@ var ESQUEMA_LIBRETA = ['Fecha', 'Categoría', 'Ingreso', 'Egreso', 'Muertes',
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
 
+// Lo que se anota en "Manejo" (la hoja sigue llamándose Sanidad). Sólo
+// Nacimiento, Muerte y Cambio de categoría mueven el stock.
 var TIPOS_SANIDAD = ['Nacimiento', 'Muerte', 'Enfermo', 'Tratamiento',
-  'Vacunación', 'Capada de terneros', 'Cambio de categoría'];
+  'Vacunación', 'Capada de terneros', 'Inseminación', 'Tacto',
+  'Servicio con toro', 'Cambio de categoría'];
+
+/** Tipos de manejo que no tocan el stock. */
+var TIPOS_SANIDAD_SIN_STOCK = ['Enfermo', 'Tratamiento', 'Vacunación',
+  'Capada de terneros', 'Inseminación', 'Tacto', 'Servicio con toro'];
 var MOTIVOS_MOVIMIENTO = ['Rotación', 'Entrada', 'Venta', 'Faena',
   'Devolución a dueño', 'Otro'];
 var LUGARES_LLUVIA = ['Casa', 'Manga', 'Otro'];
@@ -98,10 +108,11 @@ var CARPETA_FOTOS = 'Registro Campo - Fotos';
  */
 var COLUMNAS_NUMERO = ['mm', 'cabezas', 'cabezas_pesadas', 'kg_cargados',
   'kg_totales', 'kg_promedio', 'hectareas', 'dias', 'orden', 'recibidos',
-  'guardados', 'repetidos', 'Ingreso', 'Egreso', 'Muertes', 'Stock'];
+  'guardados', 'repetidos', 'Ingreso', 'Egreso', 'Muertes', 'Stock',
+  'cabezas_hoy', 'dias_descanso', 'dias_ocupado'];
 
 var COLUMNAS_FECHA = ['fecha', 'Fecha', 'desde', 'ultimo_evento', 'cargado_en',
-  'recalculado_en'];
+  'recalculado_en', 'ultima_salida'];
 
 /** Pone en texto plano las columnas que no son números ni fechas. */
 function formatoDeColumnas_(h, encabezados) {
@@ -217,8 +228,20 @@ var CONFIG_POR_DEFECTO = [
   ['mail_avisos', '', 'A quién le llegan los avisos. Varios mails separados por coma.'],
   ['mail_encargado', '', 'Mail del encargado, para el aviso de "hace días que no cargás".'],
   ['avisar_cada_registro', 'sí', '¿Mandar un mail cada vez que llegan registros? sí / no'],
-  ['dias_sin_registrar', '5', 'A los cuántos días sin registros avisar.']
+  ['dias_sin_registrar', '5', 'A los cuántos días sin registros avisar.'],
+  ['mail_parte', '', 'A quién le llega el parte semanal de los sábados. Vacío: no se manda.'],
+  ['dias_descanso_max', '45', 'En el parte, avisar los potreros con más días de descanso que esto.'],
+  ['dias_ocupado_max', '7', 'En el parte, avisar los potreros ocupados hace más días que esto.']
 ];
+
+/**
+ * Una fila de catálogo está activa salvo que diga claramente que no.
+ * Se contemplan varias formas de escribirlo porque la columna se edita a mano.
+ */
+function estaActivo_(valor) {
+  var t = texto_(valor).toLowerCase();
+  return ['no', 'n', 'false', '0', 'baja', 'inactivo', 'inactiva'].indexOf(t) < 0;
+}
 
 /** Lee un valor de la hoja Configuración. */
 function config_(clave, porDefecto) {

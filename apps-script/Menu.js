@@ -14,6 +14,7 @@ function onOpen() {
     .addItem('Recalcular todo (incluye diario de ocupación)', 'menuRecalcularTodo')
     .addSeparator()
     .addItem('Probar los avisos por mail', 'menuProbarAviso')
+    .addItem('Mandar parte semanal ahora', 'menuParteSemanal')
     .addSeparator()
     .addItem('Ver el código de activación', 'menuVerCodigo')
     .addItem('Generar un código nuevo (anula el anterior)', 'menuNuevoCodigo')
@@ -82,6 +83,7 @@ function menuPonerAlDia() {
   try {
     crearDisparadorDiario();
     crearDisparadorInactividad();
+    crearDisparadorParte();
   } catch (e) {}
   escribirCalculos_(true);
   ui.alert('Listo', cambiadas.length
@@ -108,6 +110,24 @@ function menuVaciar() {
   ui.alert('Listo',
     'Borré ' + cuantas + (cuantas === 1 ? ' fila.' : ' filas.') +
     ' La planilla quedó en cero y con las columnas al día.', ui.ButtonSet.OK);
+}
+
+/** Manda el parte semanal en el momento, para probarlo. */
+function menuParteSemanal() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var r = mandarParteSemanal();
+    if (!r.mandado) {
+      ui.alert('No lo mandé', r.motivo, ui.ButtonSet.OK);
+      return;
+    }
+    ui.alert('Mandado',
+      'Parte semanal enviado a: ' + r.destinos.join(', ') + '\n\n' +
+      r.registros + ' registros en los últimos 7 días.', ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('No pude mandarlo', String(e && e.message ? e.message : e),
+      ui.ButtonSet.OK);
+  }
 }
 
 /** Manda un mail de prueba a los destinatarios configurados. */
