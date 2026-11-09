@@ -240,7 +240,9 @@ var CONFIG_POR_DEFECTO = [
  */
 function estaActivo_(valor) {
   var t = texto_(valor).toLowerCase();
-  return ['no', 'n', 'false', '0', 'baja', 'inactivo', 'inactiva'].indexOf(t) < 0;
+  if (['no', 'n', 'false', '0', 'inactivo', 'inactiva'].indexOf(t) >= 0) return false;
+  if (t.indexOf('baja') >= 0) return false;   // "baja", "dado de baja", "de baja"
+  return true;
 }
 
 /** Lee un valor de la hoja Configuración. */

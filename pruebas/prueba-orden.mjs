@@ -697,7 +697,7 @@ titulo('24. Un potrero dado de baja no le aparece al encargado');
   const filas = ctx.leerHoja_('Potreros');
   const baja = filas[1];
   // La columna activo se edita a mano: puede decir "no", "No", "NO" o "false".
-  ['no', 'No', 'NO', 'false', 'baja'].forEach(valor => {
+  ['no', 'No', 'NO', 'false', 'baja', 'dado de baja', 'DE BAJA'].forEach(valor => {
     h.getRange(baja._fila, 5).setValue(valor);
     const ids = ctx.catalogos_().potreros.map(p => p.id);
     ok(ids.indexOf(baja.id) < 0, 'con activo = "' + valor + '" no aparece en la grilla');
