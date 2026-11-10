@@ -7,11 +7,11 @@
 
    VERSION hay que subirla en cada cambio: eso es lo que hace que el navegador
    se dé cuenta de que este archivo cambió y tire la copia vieja. */
-var VERSION = 'v8';
+var VERSION = 'v9';
 var CACHE = 'campo-' + VERSION;
 var ARCHIVOS = [
   './', 'index.html', 'estilos.css', 'app.js', 'manifest.webmanifest',
-  'iconos/icono-192.png', 'iconos/icono-512.png'
+  'potreros-geo.json', 'iconos/icono-192.png', 'iconos/icono-512.png'
 ];
 
 self.addEventListener('install', function (e) {

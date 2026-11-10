@@ -91,6 +91,9 @@ function doGet(e) {
         duenos: Object.keys(calc.libretas).sort()
       });
     }
+    if (accion === 'mapa') {
+      return json_(Object.assign({ok: true}, datosMapa_()));
+    }
     if (accion === 'recalcular') {
       return json_(Object.assign({ok: true}, recalcularSiHaceFalta(true)));
     }

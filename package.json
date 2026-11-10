@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "App de celular para registrar lo que pasa en el campo, con planilla de Google de backend.",
   "scripts": {
-    "test": "node pruebas/revisar-repo.mjs && node pruebas/prueba-orden.mjs && node pruebas/prueba-offline.mjs && node pruebas/prueba-pantallas.mjs",
+    "test": "node pruebas/revisar-repo.mjs && node pruebas/prueba-orden.mjs && node pruebas/prueba-offline.mjs && node pruebas/prueba-pantallas.mjs && node pruebas/prueba-mapa.mjs",
     "servidor": "node pruebas/servidor.mjs",
     "revisar": "node pruebas/revisar-repo.mjs"
   },

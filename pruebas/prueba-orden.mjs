@@ -529,11 +529,15 @@ titulo('18. Una planilla que ya tenía el valor mal guardado se arregla sola');
     'la reparación corre una sola vez');
 }
 
-const HOY = new Date().toISOString().slice(0, 10);
-const haceDiasISO = n => {
-  const d = new Date(Date.now() - n * 86400000);
-  return d.toISOString().slice(0, 10);
-};
+// El script trabaja en hora argentina. Si las pruebas usaran la fecha UTC,
+// entre las 21 y la medianoche darían un día de más.
+const EN_EL_CAMPO = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Argentina/Buenos_Aires',
+  year: 'numeric', month: '2-digit', day: '2-digit'
+});
+const diaDelCampo = fecha => EN_EL_CAMPO.format(fecha);
+const HOY = diaDelCampo(new Date());
+const haceDiasISO = n => diaDelCampo(new Date(Date.now() - n * 86400000));
 const diasEntre = (desde, hasta) => Math.round(
   (new Date(hasta + 'T12:00:00Z') - new Date(desde + 'T12:00:00Z')) / 86400000);
 
@@ -903,6 +907,126 @@ titulo('29. La hoja Potreros es la lista única del campo');
   const p = ctx.catalogos_().potreros[0];
   ok(Object.keys(p).join(',') === 'id,lote,hectareas,uso',
     'la app recibe sólo id, lote, hectáreas y uso', Object.keys(p).join(', '));
+}
+
+titulo('30. accion=mapa: todo lo que necesita el plano en un solo pedido');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const h = ctx.hoja_('Potreros', []);
+  const filas = ctx.leerHoja_('Potreros');
+
+  const ocupado = filas[0].id;      // le vamos a poner hacienda
+  const descansando = filas[1].id;  // entra y sale
+  const agricola = filas[2].id;     // reservado para agricultura
+  const sinDatos = filas[3].id;     // nunca se usó
+  const deBaja = filas[4].id;       // dado de baja
+
+  h.getRange(filas[2]._fila, 4).setValue('Agrícola');
+  h.getRange(filas[2]._fila, 7).setValue('Diego Pardo');   // quien_lo_usa
+  h.getRange(filas[0]._fila, 6).setValue('aguada');        // recurso
+  h.getRange(filas[4]._fila, 5).setValue('no');
+
+  const entrada = haceDiasISO(15), salida = haceDiasISO(6);
+  campo.post({ accion: 'guardar', persona: 'Nahuel', registros: [
+    { id: 'm1', hoja: 'Recuentos', fecha: entrada, cargado_en: entrada + 'T09:00:00',
+      potrero: ocupado, categoria: campo.C1, dueno: campo.D1, cabezas: 50 },
+    { id: 'm2', hoja: 'Recuentos', fecha: entrada, cargado_en: entrada + 'T09:10:00',
+      potrero: descansando, categoria: campo.C1, dueno: campo.D1, cabezas: 20 },
+    { id: 'm3', hoja: 'Movimientos', fecha: salida, cargado_en: salida + 'T09:00:00',
+      potrero_origen: descansando, potrero_destino: ocupado, categoria: campo.C1,
+      dueno: campo.D1, cabezas: 20, motivo: 'Rotación' },
+    { id: 'm4', hoja: 'Recorridas', fecha: salida, cargado_en: salida + 'T10:00:00',
+      potrero: ocupado, agua: 'Sin agua', alambre: 'Bien', pasto: '2 Normal',
+      nota: 'se secó el bebedero' },
+    { id: 'm5', hoja: 'Sanidad', fecha: salida, cargado_en: salida + 'T11:00:00',
+      potrero: ocupado, tipo: 'Vacunación', categoria: campo.C1, dueno: campo.D1,
+      cabezas: 70, causa_producto: 'aftosa' },
+    { id: 'm6', hoja: 'Lluvias', fecha: haceDiasISO(2), cargado_en: haceDiasISO(2) + 'T08:00:00',
+      mm: 22, lugar: 'Casa' },
+    { id: 'm7', hoja: 'Lluvias', fecha: haceDiasISO(20), cargado_en: haceDiasISO(20) + 'T08:00:00',
+      mm: 99, lugar: 'Casa' }
+  ] });
+
+  const r = JSON.parse(ctx.doGet({ parameter: {
+    accion: 'mapa', token: campo.token } }).getContent());
+  ok(r.ok === true, 'contesta bien');
+
+  const porId = Object.fromEntries(r.potreros.map(p => [p.id, p]));
+  const stockDe = id => r.stock.filter(s => s.potrero === id);
+  const descansoDe = id => r.descanso.find(d => d.potrero === id);
+
+  ok(porId[agricola] && porId[agricola].uso === 'Agrícola' &&
+     porId[agricola].quien_lo_usa === 'Diego Pardo',
+    'el potrero agrícola viene con uso y con quién lo usa',
+    porId[agricola] ? porId[agricola].quien_lo_usa : 'no está');
+  ok(stockDe(agricola).length === 0, 'y sin hacienda');
+
+  ok(stockDe(ocupado).length === 1 && stockDe(ocupado)[0].cabezas === 70,
+    'el ocupado trae su hacienda con detalle',
+    stockDe(ocupado).length ? String(stockDe(ocupado)[0].cabezas) : 'vacío');
+  ok(stockDe(ocupado)[0].desde === entrada && stockDe(ocupado)[0].dias >= 15,
+    'con desde cuándo y cuántos días', stockDe(ocupado)[0].desde);
+  ok(porId[ocupado].recurso === 'aguada', 'y el recurso del potrero');
+  ok(descansoDe(ocupado).ocupado === 'sí', 'Descanso lo da por ocupado');
+
+  const dd = descansoDe(descansando);
+  ok(dd && dd.ocupado === 'no' && dd.dias_descanso === diasEntre(salida, HOY),
+    'el que se vació trae sus días de descanso',
+    dd ? dd.dias_descanso + ' días' : 'no está');
+
+  ok(stockDe(sinDatos).length === 0 && descansoDe(sinDatos) &&
+     descansoDe(sinDatos).dias_descanso === '',
+    'el que nunca se usó viene sin datos, no roto');
+
+  ok(!porId[deBaja] || porId[deBaja].activo === false,
+    'el dado de baja viene marcado para no dibujarlo',
+    porId[deBaja] ? String(porId[deBaja].activo) : 'no vino');
+  ok(r.potreros.every(p => typeof p.activo === 'boolean'),
+    'todos traen si están activos');
+
+  ok(r.recorridas[ocupado] && r.recorridas[ocupado].problema === true &&
+     r.recorridas[ocupado].agua === 'Sin agua',
+    'trae la última recorrida y si tuvo problema');
+  ok(r.manejo[ocupado] && r.manejo[ocupado].tipo === 'Vacunación',
+    'y el último manejo', r.manejo[ocupado] ? r.manejo[ocupado].tipo : 'no está');
+
+  ok(r.lluvia_7_dias === 22, 'la lluvia de 7 días, sin la vieja',
+    r.lluvia_7_dias + ' mm');
+  ok(r.umbrales.dias_descanso_min === 20 && r.umbrales.dias_descanso_listo === 35 &&
+     r.umbrales.tope_carga === 1.6,
+    'los umbrales de Configuración',
+    JSON.stringify(r.umbrales));
+  ok(r.coeficientes['Vaquillona'] === 0.8 && r.coeficientes['Toro'] === 1.3,
+    'y los coeficientes EV', 'Vaquillona ' + r.coeficientes['Vaquillona']);
+  ok(typeof r.ultimo_recalculo === 'string', 'más la fecha del último recálculo');
+
+  const sinToken = JSON.parse(ctx.doGet({ parameter: {
+    accion: 'mapa', token: 'cualquiera' } }).getContent());
+  ok(sinToken.ok === false, 'y sin código de activación no contesta');
+}
+
+titulo('31. Coeficientes EV');
+{
+  const campo = nuevoCampo();
+  const ctx = campo.entorno.contexto;
+  const filas = ctx.leerHoja_('Coeficientes');
+  const porCat = Object.fromEntries(filas.map(f => [f.categoria, f.ev]));
+  ok(porCat['Vaca parida'] === 1.15, 'la vaca parida vale 1,15',
+    String(porCat['Vaca parida']));
+  ok(porCat['Ternera'] === 0.5 && porCat['Ternero macho'] === 0.5,
+    'los terneros 0,5');
+  ok(Object.keys(porCat).length >= 12,
+    'y están también las categorías de la planilla, en 1 para editar',
+    Object.keys(porCat).length + ' categorías');
+
+  // Volver a armar las hojas no pisa lo que se haya editado.
+  const h = ctx.hoja_('Coeficientes', []);
+  const fila = ctx.leerHoja_('Coeficientes').find(f => f.categoria === 'Toro');
+  h.getRange(fila._fila, 2).setValue(1.5);
+  ctx.armarHojas_();
+  const despues = ctx.leerHoja_('Coeficientes').find(f => f.categoria === 'Toro');
+  ok(despues.ev === 1.5, 'si se cambia un coeficiente, queda', String(despues.ev));
 }
 
 console.log('\n' + (fallas === 0 ? '✓ Todas las pruebas pasaron.'

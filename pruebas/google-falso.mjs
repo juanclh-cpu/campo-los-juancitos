@@ -237,7 +237,7 @@ export function crearEntorno() {
   const semilla = fs.existsSync(path.join(dir, 'Semilla.js'))
     ? 'Semilla.js' : 'Semilla.ejemplo.js';
   ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Parte.js',
-    'Recalculo.js', 'Api.js', 'Menu.js', 'Instalar.js', semilla]
+    'Recalculo.js', 'Mapa.js', 'Api.js', 'Menu.js', 'Instalar.js', semilla]
     .forEach(f => {
       vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), contexto, { filename: f });
     });

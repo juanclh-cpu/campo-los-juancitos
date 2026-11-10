@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v8';
+var VERSION = 'v9';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -599,6 +599,7 @@ PANTALLAS.inicio = function () {
       }, 'repetir'));
   }
 
+  cuerpo.push(boton('🗺️ MAPA DEL CAMPO', function () { ir('mapa'); }, 'ancho'));
   cuerpo.push(boton('STOCK', function () { ir('stock'); }, 'ancho'));
   cuerpo.push(boton('Mis últimos registros', function () { ir('ultimos'); }, 'secundario'));
 
@@ -982,17 +983,36 @@ function confirmacion(def, valores) {
   nota.addEventListener('input', function () { valores.nota = nota.value; });
   cuerpo.push(nota);
 
+  var aviso = def.advertencia ? def.advertencia(valores) : '';
+  if (aviso) cuerpo.push(el('div', 'aviso-agricola', '⚠️ ' + aviso));
+
   cuerpo.push(boton('GUARDAR', function () {
     var falta = def.validar ? def.validar(valores) : '';
     if (falta) {
       valores._falta = falta;
       return repintarme();
     }
+    if (aviso && !valores._avisoVisto) {
+      return ir('confirmarAviso', {def: def, valores: valores, aviso: aviso});
+    }
     guardarRegistro(def, valores);
   }, 'ancho'));
 
   return marco(def.titulo, cuerpo);
 }
+
+/** Cuando algo no cuadra, se pregunta de nuevo antes de guardar. */
+PANTALLAS.confirmarAviso = function (datos) {
+  var cuerpo = [];
+  cuerpo.push(el('div', 'aviso-agricola', '⚠️ ' + datos.aviso));
+  cuerpo.push(el('div', 'frase', datos.def.frase(datos.valores)));
+  cuerpo.push(boton('SÍ, GUARDAR IGUAL', function () {
+    datos.valores._avisoVisto = true;
+    guardarRegistro(datos.def, datos.valores);
+  }, 'ancho'));
+  cuerpo.push(boton('No, volver', function () { volver(); }, 'secundario'));
+  return marco('Un momento', cuerpo);
+};
 
 /** ¿Este registro mueve el stock? Los tipos los dice la planilla. */
 function mueveStock(registro) {
@@ -1008,6 +1028,7 @@ function mueveStock(registro) {
 async function guardarRegistro(def, valores) {
   var registro = {id: uuid(), hoja: def.tipo, fecha: valores.fecha, nota: valores.nota || ''};
   delete valores._mm;
+  delete valores._avisoVisto;
   def.campos.forEach(function (c) {
     if (valores[c] !== undefined && valores[c] !== null) registro[c] = valores[c];
   });
@@ -1143,6 +1164,13 @@ function defMover() {
         return 'Rotación';
       }
     }],
+    advertencia: function (v) {
+      var p = datosPotrero(v.potrero_destino);
+      if (p && p.uso === 'Agrícola') {
+        return 'Ese potrero es de agricultura. ¿Seguro?';
+      }
+      return '';
+    },
     frase: function (v) {
       var que = cabezasEnPalabras(v) + ' de ' + v.dueno;
       if (v.potrero_origen === ENTRADA_CAMPO) return 'Entran ' + que + ' al ' + v.potrero_destino;
@@ -1900,6 +1928,590 @@ PANTALLAS.problemas = function () {
     });
   });
   return marco('Registros con problema', cuerpo);
+};
+
+// ===========================================================================
+// 17. Mapa del campo
+// ===========================================================================
+
+var GEO = null;                 // el plano: polígonos y linderos
+var COLORES_CLIENTE = 8;        // cuántos colores distintos para los dueños
+var CARGA_AMARILLA = 0.7;       // a partir de este porcentaje del tope, amarillo
+
+/** Baja el plano una sola vez. Queda cacheado por el service worker. */
+async function cargarGeo() {
+  if (GEO) return GEO;
+  try {
+    var r = await fetch('potreros-geo.json');
+    GEO = await r.json();
+  } catch (e) {
+    GEO = null;
+  }
+  return GEO;
+}
+
+/**
+ * Color de un potrero según cuántos días lleva descansando.
+ * Devuelve el nombre del color, no el color: así se puede probar.
+ */
+function colorDescanso(fila, umbrales) {
+  if (!fila) return 'sindatos';
+  if (fila.ocupado === 'sí') return 'azul';
+  var dias = fila.dias_descanso;
+  if (dias === '' || dias === null || dias === undefined) return 'sindatos';
+  if (dias < umbrales.dias_descanso_min) return 'rojo';
+  if (dias <= umbrales.dias_descanso_listo) return 'amarillo';
+  return 'verde';
+}
+
+/** Color de un potrero según la carga: equivalentes vaca por hectárea. */
+function colorCarga(evPorHa, tope) {
+  if (evPorHa === null || evPorHa === undefined || !tope) return 'sindatos';
+  if (evPorHa <= 0) return 'sindatos';
+  if (evPorHa > tope) return 'rojo';
+  if (evPorHa > tope * CARGA_AMARILLA) return 'amarillo';
+  return 'verde';
+}
+
+/** Equivalentes vaca por hectárea de un potrero. null si no se puede saber. */
+function evPorHectarea(grupos, hectareas, coeficientes) {
+  if (!hectareas || !grupos || !grupos.length) return null;
+  var ev = grupos.reduce(function (a, g) {
+    var coef = coeficientes[g.categoria];
+    return a + g.cabezas * (coef === undefined ? 1 : coef);
+  }, 0);
+  if (ev <= 0) return null;
+  return Math.round(ev / hectareas * 100) / 100;
+}
+
+/** Los datos del mapa, ordenados por potrero para dibujar rápido. */
+function armarIndice(datos) {
+  var ix = {potreros: {}, stock: {}, descanso: {}, duenos: []};
+  (datos.potreros || []).forEach(function (p) { ix.potreros[p.id] = p; });
+  (datos.descanso || []).forEach(function (d) { ix.descanso[d.potrero] = d; });
+  (datos.stock || []).forEach(function (s) {
+    if (!ix.stock[s.potrero]) ix.stock[s.potrero] = [];
+    ix.stock[s.potrero].push(s);
+    if (ix.duenos.indexOf(s.dueno) < 0) ix.duenos.push(s.dueno);
+  });
+  ix.duenos.sort();
+  return ix;
+}
+
+/** Qué tipo de dibujo le toca a cada polígono del plano. */
+function claseDePotrero(geo, ix) {
+  var p = ix.potreros[geo.id];
+  if (p && p.activo === false) return 'oculto';
+  var instalacion = geo.car && geo.car !== 'Pastoreo';
+  if (instalacion) return 'instalacion';
+  if (p && p.uso === 'Instalaciones') return 'instalacion';
+  if (p && p.uso === 'Agrícola') return 'agricola';
+  if (!p) return 'sinlista';
+  return 'potrero';
+}
+
+PANTALLAS.mapa = function (datos) {
+  var modo = datos.modo || 'descanso';
+  var cuerpo = [];
+  var cont = el('div');
+
+  var selector = el('div', 'modos');
+  [['descanso', 'Descanso'], ['carga', 'Carga'], ['clientes', 'Clientes']]
+    .forEach(function (o) {
+      var b = boton(o[1], function () { reemplazar('mapa', {modo: o[0]}); });
+      if (modo === o[0]) b.className = 'elegido';
+      selector.appendChild(b);
+    });
+
+  var cache = leerCache('mapa');
+  cuerpo.push(cont);
+
+  function pintarTodo(d, cuando, enVivo) {
+    cont.innerHTML = '';
+    if (!d) {
+      cont.appendChild(el('p', 'vacio-aviso',
+        'Sin señal y todavía no bajé el mapa. Buscá un lugar con señal.'));
+      return;
+    }
+    var ix = armarIndice(d);
+
+    cont.appendChild(franjaDelCampo(d, ix));
+    cont.appendChild(selector);
+    if (!enVivo) {
+      cont.appendChild(el('div', 'estado espera', 'Datos del ' +
+        (cuando ? fechaEnPalabras(cuando.slice(0, 10), true) + ' ' +
+          cuando.slice(11, 16) : 'último rato')));
+    }
+    cont.appendChild(dibujarMapa(d, ix, modo));
+    cont.appendChild(leyendaDe(modo, d, ix));
+
+    if (d.fuera_de_lista && d.fuera_de_lista.length) {
+      cont.appendChild(el('p', 'pie', 'Con hacienda pero sin dibujo en el plano: ' +
+        d.fuera_de_lista.join(', ') + '.'));
+    }
+  }
+
+  pintarTodo(cache ? cache.datos : null, cache ? cache.cuando : null, false);
+
+  cargarGeo().then(function () {
+    if (!navigator.onLine) {
+      pintarTodo(cache ? cache.datos : null, cache ? cache.cuando : null, false);
+      return;
+    }
+    cont.innerHTML = '';
+    cont.appendChild(el('p', 'vacio-aviso', 'Buscando el mapa…'));
+    return apiGet('mapa').then(function (r) {
+      if (!r.ok) throw new Error(r.error || 'error');
+      guardarCache('mapa', r);
+      pintarTodo(r, ahoraISO(), true);
+    }).catch(function () {
+      pintarTodo(cache ? cache.datos : null, cache ? cache.cuando : null, false);
+    });
+  });
+
+  return marco('Mapa', cuerpo);
+};
+
+/** La franja de arriba: lo que hay que saber de un vistazo. */
+function franjaDelCampo(d, ix) {
+  var franja = el('div', 'franja');
+
+  var total = (d.stock || []).reduce(function (a, s) { return a + s.cabezas; }, 0);
+  var listos = (d.descanso || []).filter(function (f) {
+    var p = ix.potreros[f.potrero];
+    if (!p || p.activo === false || p.uso === 'Agrícola' ||
+        p.uso === 'Instalaciones') return false;
+    return colorDescanso(f, d.umbrales) === 'verde';
+  }).length;
+  var conProblema = Object.keys(d.recorridas || {}).filter(function (k) {
+    return d.recorridas[k].problema && ix.potreros[k] &&
+      ix.potreros[k].activo !== false;
+  });
+
+  function dato(valor, texto, clase) {
+    var c = el('div', 'dato' + (clase ? ' ' + clase : ''));
+    c.appendChild(el('b', null, String(valor)));
+    c.appendChild(el('span', null, texto));
+    return c;
+  }
+
+  franja.appendChild(dato(total, 'cabezas en el campo'));
+  franja.appendChild(dato(numeroLindo(d.lluvia_7_dias || 0) + ' mm',
+    'llovió en 7 días'));
+  franja.appendChild(dato(listos, 'potreros listos para entrar',
+    listos > 0 ? 'ok' : ''));
+  franja.appendChild(dato(conProblema.length,
+    conProblema.length ? 'con problema: ' + conProblema.join(', ')
+      : 'potreros con problema',
+    conProblema.length ? 'mal' : ''));
+  return franja;
+}
+
+/** El plano en sí. */
+function dibujarMapa(d, ix, modo) {
+  var caja = el('div', 'mapa-caja');
+  if (!GEO) {
+    caja.appendChild(el('p', 'vacio-aviso', 'No pude bajar el plano.'));
+    return caja;
+  }
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', GEO.viewBox);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  // Rayado para los potreros de agricultura.
+  var defs = document.createElementNS(NS, 'defs');
+  defs.innerHTML = '<pattern id="rayado" width="10" height="10" ' +
+    'patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+    '<rect width="10" height="10" fill="#dcdcd4"/>' +
+    '<line x1="0" y1="0" x2="0" y2="10" stroke="#a9a9a0" stroke-width="4"/>' +
+    '</pattern>';
+  svg.appendChild(defs);
+
+  var lienzo = document.createElementNS(NS, 'g');
+  svg.appendChild(lienzo);
+
+  (GEO.potreros || []).forEach(function (geo) {
+    var clase = claseDePotrero(geo, ix);
+    if (clase === 'oculto') return;
+    dibujarPotrero(NS, lienzo, geo, clase, d, ix, modo);
+  });
+
+  dibujarLinderos(NS, lienzo, GEO);
+  caja.appendChild(svg);
+
+  var envoltorio = el('div');
+  envoltorio.appendChild(caja);
+  envoltorio.appendChild(hacerZoom(svg, lienzo));
+  return envoltorio;
+}
+
+function centroDe(pts) {
+  var x = 0, y = 0;
+  pts.forEach(function (p) { x += p[0]; y += p[1]; });
+  return [x / pts.length, y / pts.length];
+}
+
+function cajaDe(pts) {
+  var xs = pts.map(function (p) { return p[0]; });
+  var ys = pts.map(function (p) { return p[1]; });
+  return {
+    ancho: Math.max.apply(null, xs) - Math.min.apply(null, xs),
+    alto: Math.max.apply(null, ys) - Math.min.apply(null, ys)
+  };
+}
+
+function dibujarPotrero(NS, lienzo, geo, clase, d, ix, modo) {
+  var p = ix.potreros[geo.id];
+  var grupos = ix.stock[geo.id] || [];
+  var cabezas = grupos.reduce(function (a, g) { return a + g.cabezas; }, 0);
+
+  var poly = document.createElementNS(NS, 'polygon');
+  poly.setAttribute('points', geo.pts.map(function (q) { return q.join(','); }).join(' '));
+  poly.setAttribute('data-potrero', geo.id);
+  poly.setAttribute('class', 'potrero ' + claseColor(clase, geo, d, ix, modo));
+  if (clase === 'agricola') poly.setAttribute('fill', 'url(#rayado)');
+
+  var descanso = ix.descanso[geo.id];
+  if (clase === 'potrero' && descanso && descanso.ocupado === 'sí' &&
+      descanso.dias_ocupado !== '' && descanso.dias_ocupado > d.umbrales.dias_ocupado_max) {
+    poly.setAttribute('class', poly.getAttribute('class') + ' ocupado-de-mas');
+  }
+
+  if (clase !== 'instalacion') {
+    poly.addEventListener('click', function () {
+      ir('ficha', {potrero: geo.id});
+    });
+  }
+  lienzo.appendChild(poly);
+
+  if (clase === 'instalacion') return;
+
+  var centro = centroDe(geo.pts);
+  var caja = cajaDe(geo.pts);
+  var etiqueta = geo.id;
+  var tam = Math.min(caja.ancho / (etiqueta.length * 0.62), caja.alto * 0.5, 34);
+  if (tam < 7) return;
+
+  var claro = ['azul', 'rojo', 'verde'].indexOf(
+    claseColor(clase, geo, d, ix, modo).replace('p-', '')) >= 0 ||
+    /p-cliente/.test(claseColor(clase, geo, d, ix, modo));
+
+  var t = document.createElementNS(NS, 'text');
+  t.setAttribute('x', centro[0]);
+  t.setAttribute('y', centro[1] + tam * 0.34);
+  t.setAttribute('font-size', tam);
+  t.setAttribute('class', 'etiqueta' + (claro ? ' clara' : ''));
+  t.textContent = etiqueta;
+  lienzo.appendChild(t);
+
+  // En los grandes entra también la hacienda que tienen.
+  if (clase === 'potrero' && cabezas > 0 && caja.alto > 46 && tam >= 14) {
+    var t2 = document.createElementNS(NS, 'text');
+    t2.setAttribute('x', centro[0]);
+    t2.setAttribute('y', centro[1] + tam * 1.25);
+    t2.setAttribute('font-size', tam * 0.62);
+    t2.setAttribute('class', 'etiqueta-chica' + (claro ? ' clara' : ''));
+    t2.setAttribute('fill', claro ? '#fff' : '#333');
+    t2.textContent = cabezas + ' cab.';
+    lienzo.appendChild(t2);
+  }
+
+  if (clase === 'agricola' && caja.alto > 58 && caja.ancho > 95 && tam >= 14) {
+    var t3 = document.createElementNS(NS, 'text');
+    t3.setAttribute('x', centro[0]);
+    t3.setAttribute('y', centro[1] + tam * 1.2);
+    t3.setAttribute('font-size', Math.min(tam * 0.5, 15));
+    t3.setAttribute('class', 'etiqueta-chica');
+    t3.setAttribute('fill', '#5f6368');
+    t3.textContent = 'Agricultura: no entrar';
+    lienzo.appendChild(t3);
+    var quien = p && p.quien_lo_usa;
+    if (quien && caja.alto > 80) {
+      var t4 = document.createElementNS(NS, 'text');
+      t4.setAttribute('x', centro[0]);
+      t4.setAttribute('y', centro[1] + tam * 1.85);
+      t4.setAttribute('font-size', Math.min(tam * 0.46, 14));
+      t4.setAttribute('class', 'etiqueta-chica');
+      t4.setAttribute('fill', '#5f6368');
+      t4.textContent = quien;
+      lienzo.appendChild(t4);
+    }
+  }
+}
+
+/** La clase CSS con el color que le toca al potrero en este modo. */
+function claseColor(clase, geo, d, ix, modo) {
+  if (clase === 'instalacion') return 'p-gris';
+  if (clase === 'agricola') return 'p-gris';
+  if (clase === 'sinlista') return 'p-sindatos';
+
+  var grupos = ix.stock[geo.id] || [];
+  if (modo === 'descanso') {
+    return 'p-' + colorDescanso(ix.descanso[geo.id], d.umbrales);
+  }
+  if (modo === 'carga') {
+    var p = ix.potreros[geo.id];
+    var ev = evPorHectarea(grupos, p ? p.hectareas : 0, d.coeficientes || {});
+    return 'p-' + colorCarga(ev, d.umbrales.tope_carga);
+  }
+  // Clientes: manda el dueño que más cabezas tiene en el potrero.
+  if (!grupos.length) return 'p-sindatos';
+  var porDueno = {};
+  grupos.forEach(function (g) {
+    porDueno[g.dueno] = (porDueno[g.dueno] || 0) + g.cabezas;
+  });
+  var mayor = Object.keys(porDueno).sort(function (a, b) {
+    return porDueno[b] - porDueno[a];
+  })[0];
+  var i = ix.duenos.indexOf(mayor);
+  return 'p-cliente-' + (i < 0 ? 0 : i % COLORES_CLIENTE);
+}
+
+function dibujarLinderos(NS, lienzo, geo) {
+  var l = geo.linderos || {};
+  var caja = geo.viewBox.split(/\s+/).map(Number);
+  var x0 = caja[0], y0 = caja[1], ancho = caja[2], alto = caja[3];
+  function texto(t, x, y, rotar) {
+    if (!t) return;
+    var e = document.createElementNS(NS, 'text');
+    e.setAttribute('x', x);
+    e.setAttribute('y', y);
+    e.setAttribute('class', 'lindero');
+    if (rotar) e.setAttribute('transform', 'rotate(' + rotar + ' ' + x + ' ' + y + ')');
+    e.textContent = [].concat(t).join(' · ');
+    lienzo.appendChild(e);
+  }
+  texto(l.norte, x0 + ancho / 2, y0 + 12);
+  texto(l.sur, x0 + ancho / 2, y0 + alto - 4);
+  texto(l.oeste, x0 + 10, y0 + alto / 2, -90);
+  texto(l.este, x0 + ancho - 6, y0 + alto / 2, 90);
+}
+
+/** Zoom con dos dedos y arrastre con uno. */
+function hacerZoom(svg, lienzo) {
+  var escala = 1, dx = 0, dy = 0;
+  var punteros = {};
+  var distanciaInicial = 0, escalaInicial = 1;
+  var movido = 0;
+
+  function aplicar() {
+    lienzo.setAttribute('transform',
+      'translate(' + dx + ' ' + dy + ') scale(' + escala + ')');
+  }
+
+  svg.addEventListener('pointerdown', function (e) {
+    punteros[e.pointerId] = {x: e.clientX, y: e.clientY};
+    movido = 0;
+    if (Object.keys(punteros).length === 2) {
+      var p = Object.keys(punteros).map(function (k) { return punteros[k]; });
+      distanciaInicial = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      escalaInicial = escala;
+    }
+    svg.setPointerCapture(e.pointerId);
+  });
+
+  svg.addEventListener('pointermove', function (e) {
+    var anterior = punteros[e.pointerId];
+    if (!anterior) return;
+    var claves = Object.keys(punteros);
+    if (claves.length === 1) {
+      var mx = e.clientX - anterior.x, my = e.clientY - anterior.y;
+      movido += Math.abs(mx) + Math.abs(my);
+      var ancho = svg.clientWidth || 1;
+      var caso = Number(svg.getAttribute('viewBox').split(/\s+/)[2]) / ancho;
+      dx += mx * caso;
+      dy += my * caso;
+      aplicar();
+    }
+    punteros[e.pointerId] = {x: e.clientX, y: e.clientY};
+    if (claves.length === 2 && distanciaInicial) {
+      var p = claves.map(function (k) { return punteros[k]; });
+      var ahora = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      escala = Math.min(8, Math.max(1, escalaInicial * (ahora / distanciaInicial)));
+      movido += 20;
+      aplicar();
+    }
+  });
+
+  function soltar(e) {
+    delete punteros[e.pointerId];
+    if (Object.keys(punteros).length < 2) distanciaInicial = 0;
+  }
+  svg.addEventListener('pointerup', soltar);
+  svg.addEventListener('pointercancel', soltar);
+  // Un arrastre no tiene que abrir la ficha del potrero.
+  svg.addEventListener('click', function (e) {
+    if (movido > 12) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  return boton('Ver todo el campo', function () {
+    escala = 1; dx = 0; dy = 0;
+    aplicar();
+  }, 'secundario');
+}
+
+function leyendaDe(modo, d, ix) {
+  var cont = el('div', 'leyenda');
+  function item(color, texto) {
+    var i = el('div', 'item');
+    var c = el('span', 'cuadro');
+    c.style.background = color;
+    i.appendChild(c);
+    i.appendChild(el('span', null, texto));
+    cont.appendChild(i);
+  }
+  if (modo === 'descanso') {
+    item('#e53935', 'Recién salió (menos de ' + d.umbrales.dias_descanso_min + ' días)');
+    item('#f9a825', 'Descansando');
+    item('#43a047', 'Listo para entrar (más de ' + d.umbrales.dias_descanso_listo + ')');
+    item('#1e88e5', 'Con hacienda');
+  } else if (modo === 'carga') {
+    item('#43a047', 'Holgado');
+    item('#f9a825', 'Cerca del tope');
+    item('#e53935', 'Pasado de ' + numeroLindo(d.umbrales.tope_carga) + ' EV/ha');
+    item('#eceff1', 'Vacío');
+  } else {
+    ix.duenos.forEach(function (dueno, i) {
+      var muestra = el('div', 'item');
+      var c = el('span', 'cuadro');
+      c.className = 'cuadro p-cliente-' + (i % COLORES_CLIENTE);
+      muestra.appendChild(c);
+      muestra.appendChild(el('span', null, dueno));
+      cont.appendChild(muestra);
+    });
+    if (!ix.duenos.length) item('#eceff1', 'Todavía no hay hacienda');
+  }
+  item('#cfd3cd', 'Agricultura e instalaciones');
+  return cont;
+}
+
+/** La ficha de un potrero: todo lo que se sabe de él, en una pantalla. */
+PANTALLAS.ficha = function (datos) {
+  var cache = leerCache('mapa');
+  var d = cache ? cache.datos : null;
+  var id = datos.potrero;
+  var cuerpo = [];
+
+  if (!d) {
+    cuerpo.push(el('p', 'vacio-aviso', 'Todavía no bajé los datos del mapa.'));
+    return marco(id, cuerpo);
+  }
+
+  var ix = armarIndice(d);
+  var p = ix.potreros[id];
+  var grupos = ix.stock[id] || [];
+  var descanso = ix.descanso[id];
+  var cabezas = grupos.reduce(function (a, g) { return a + g.cabezas; }, 0);
+
+  if (p && p.uso === 'Agrícola') {
+    cuerpo.push(el('div', 'aviso-agricola', 'Reservado para agricultura' +
+      (p.quien_lo_usa ? ' (' + p.quien_lo_usa + ')' : '') + '. No meter hacienda.'));
+  }
+
+  var ficha = el('div', 'grupo-potrero');
+  if (p) {
+    if (p.hectareas) ficha.appendChild(el('p', 'ficha-dato',
+      numeroLindo(p.hectareas) + ' hectáreas'));
+    if (p.uso) ficha.appendChild(el('p', 'ficha-dato', 'Uso: ' + p.uso));
+    if (p.recurso) ficha.appendChild(el('p', 'ficha-dato', 'Recurso: ' + p.recurso));
+    if (p.nota) ficha.appendChild(el('p', 'ficha-dato', p.nota));
+  } else {
+    ficha.appendChild(el('p', 'ficha-dato', 'Este potrero no está en la lista.'));
+  }
+  cuerpo.push(ficha);
+
+  // --- hacienda ------------------------------------------------------------
+  var haciendaCaja = el('div', 'grupo-potrero');
+  haciendaCaja.appendChild(el('h3', null, 'Hacienda'));
+  if (!grupos.length) {
+    haciendaCaja.appendChild(el('div', 'sub', 'No tiene hacienda.'));
+  } else {
+    grupos.slice().sort(function (a, b) {
+      return (a.dueno + a.categoria).localeCompare(b.dueno + b.categoria);
+    }).forEach(function (g) {
+      var linea = el('div', 'linea');
+      var texto = g.categoria + ' · ' + g.dueno;
+      if (g.dias !== '' && g.dias !== null && g.dias !== undefined) {
+        texto += ' · hace ' + g.dias + (g.dias === 1 ? ' día' : ' días');
+      }
+      linea.appendChild(el('span', null, texto));
+      linea.appendChild(el('b', null, String(g.cabezas)));
+      haciendaCaja.appendChild(linea);
+    });
+    var ev = evPorHectarea(grupos, p ? p.hectareas : 0, d.coeficientes || {});
+    var total = el('div', 'linea');
+    total.appendChild(el('span', null, 'Total' +
+      (ev ? ' · ' + numeroLindo(ev) + ' EV por hectárea' : '')));
+    total.appendChild(el('b', null, String(cabezas)));
+    haciendaCaja.appendChild(total);
+  }
+  cuerpo.push(haciendaCaja);
+
+  // --- descanso ------------------------------------------------------------
+  if (descanso) {
+    var texto;
+    if (descanso.ocupado === 'sí') {
+      texto = descanso.dias_ocupado === ''
+        ? 'Con hacienda.'
+        : 'Ocupado hace ' + descanso.dias_ocupado +
+          (descanso.dias_ocupado === 1 ? ' día.' : ' días.');
+    } else if (descanso.dias_descanso === '') {
+      texto = 'Vacío. Todavía no hay registro de cuándo salió la hacienda.';
+    } else {
+      texto = 'Descansando hace ' + descanso.dias_descanso +
+        (descanso.dias_descanso === 1 ? ' día' : ' días') +
+        (descanso.ultima_salida ? ' (salió el ' +
+          fechaEnPalabras(descanso.ultima_salida, true) + ').' : '.');
+    }
+    cuerpo.push(el('div', 'total', texto));
+  }
+
+  // --- última recorrida y último manejo ------------------------------------
+  var r = (d.recorridas || {})[id];
+  if (r) {
+    var caja = el('div', 'grupo-potrero' );
+    caja.appendChild(el('h3', null, 'Última recorrida'));
+    caja.appendChild(el('div', 'sub', fechaEnPalabras(r.fecha)));
+    var linea = el('div', 'linea');
+    linea.appendChild(el('span', null, 'Agua ' + r.agua + ' · alambre ' +
+      r.alambre + ' · pasto ' + r.pasto));
+    caja.appendChild(linea);
+    if (r.problema) {
+      caja.appendChild(el('div', 'falta', 'Revisar: ' +
+        (r.agua !== 'Bien' ? 'agua ' + r.agua.toLowerCase() : '') +
+        (r.agua !== 'Bien' && r.alambre !== 'Bien' ? ', ' : '') +
+        (r.alambre !== 'Bien' ? 'alambre ' + r.alambre.toLowerCase() : '')));
+    }
+    if (r.nota) caja.appendChild(el('div', 'sub', r.nota));
+    cuerpo.push(caja);
+  }
+
+  var m = (d.manejo || {})[id];
+  if (m) {
+    var cajaM = el('div', 'grupo-potrero');
+    cajaM.appendChild(el('h3', null, 'Último manejo'));
+    cajaM.appendChild(el('div', 'sub', fechaEnPalabras(m.fecha)));
+    var lineaM = el('div', 'linea');
+    lineaM.appendChild(el('span', null, m.tipo + ' · ' + m.categoria +
+      ' · ' + m.dueno + (m.detalle ? ' · ' + m.detalle : '')));
+    lineaM.appendChild(el('b', null, String(m.cabezas)));
+    cajaM.appendChild(lineaM);
+    cuerpo.push(cajaM);
+  }
+
+  // --- qué hacer desde acá --------------------------------------------------
+  cuerpo.push(boton('Mover hacienda desde acá', function () {
+    PILA = [{nombre: 'inicio', datos: {}}];
+    ir('mover', {valores: {potrero_origen: id}, paso: 1});
+  }, 'ancho'));
+  cuerpo.push(boton('Contar este potrero', function () {
+    PILA = [{nombre: 'inicio', datos: {}}];
+    ir('contar', {valores: {potrero: id}, paso: 1});
+  }, 'ancho'));
+
+  return marco(id, cuerpo);
 };
 
 // ===========================================================================

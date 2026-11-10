@@ -70,16 +70,17 @@ function escribirCalculos_(conDiario) {
 function armarHojas_() {
   Object.keys(ESQUEMA).forEach(function (n) { hoja_(n, ESQUEMA[n]); });
   [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.STOCK, HOJA.DIARIO,
-    HOJA.RESUMEN, HOJA.DESCANSO, HOJA.CONFIG, HOJA.AVISOS,
+    HOJA.RESUMEN, HOJA.DESCANSO, HOJA.COEFICIENTES, HOJA.CONFIG, HOJA.AVISOS,
     HOJA.LOG].forEach(function (n) {
     hoja_(n, ESQUEMA_REF[n]);
   });
   // Las hojas que se editan a mano pueden tener columnas propias: se les
   // agregan las que falten al final y no se les borra ninguna.
-  [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.AVISOS,
+  [HOJA.POTREROS, HOJA.DUENOS, HOJA.CATEGORIAS, HOJA.AVISOS, HOJA.COEFICIENTES,
     HOJA.CONFIG].forEach(function (n) {
     agregarColumnasFaltantes_(n, ESQUEMA_REF[n]);
   });
+  sembrarCoeficientes_();
   sembrarConfiguracion_();
   var libro = ss_();
   var h1 = libro.getSheetByName('Hoja 1') || libro.getSheetByName('Sheet1') ||
@@ -113,6 +114,25 @@ function agregarColumnasFaltantes_(nombre, esquema) {
     }
   }
   return faltan;
+}
+
+/**
+ * Carga los coeficientes que falten: los que pidió JC y, para el resto de las
+ * categorías, un 1 que se puede editar a mano. Nunca pisa los que ya están.
+ */
+function sembrarCoeficientes_() {
+  var h = hoja_(HOJA.COEFICIENTES, ESQUEMA_REF[HOJA.COEFICIENTES]);
+  var existentes = {};
+  leerHoja_(HOJA.COEFICIENTES).forEach(function (f) {
+    existentes[texto_(f.categoria)] = true;
+  });
+  COEFICIENTES_INICIALES.forEach(function (c) {
+    if (!existentes[c[0]]) { h.appendRow(c); existentes[c[0]] = true; }
+  });
+  leerHoja_(HOJA.CATEGORIAS).forEach(function (f) {
+    var cat = texto_(f.categoria);
+    if (cat && !existentes[cat]) { h.appendRow([cat, 1]); existentes[cat] = true; }
+  });
 }
 
 /** Carga las filas de Configuración que falten, sin pisar las que ya están. */

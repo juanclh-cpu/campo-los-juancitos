@@ -212,7 +212,10 @@ async function principal() {
     const MUEVEN = ['Recuentos', 'Movimientos', 'Sanidad'];
     const primerDia = registros
       .filter(r => MUEVEN.indexOf(r.hoja) >= 0).map(r => r.fecha).sort()[0];
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
     const diasEsperados = Math.round(
       (new Date(hoy + 'T12:00:00Z') - new Date(primerDia + 'T12:00:00Z')) / 86400000) + 1;
     ok(dias.size === diasEsperados,

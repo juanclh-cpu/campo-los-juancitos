@@ -78,6 +78,27 @@ const servidor = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(mails));
   }
+  // Para las pruebas: cambiar una fila de Potreros, como si se editara a mano.
+  if (url.pathname === '/_editar-potrero' && req.method === 'POST') {
+    const cuerpo = await new Promise(ok => {
+      let d = '';
+      req.on('data', c => { d += c; });
+      req.on('end', () => ok(JSON.parse(d)));
+    });
+    const h = contexto.hoja_('Potreros', []);
+    const enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]
+      .map(v => String(v));
+    const filas = contexto.leerHoja_('Potreros');
+    const fila = filas.find(f => String(f.id) === cuerpo.id);
+    if (fila) {
+      Object.keys(cuerpo).forEach(k => {
+        const col = enc.indexOf(k);
+        if (k !== 'id' && col >= 0) h.getRange(fila._fila, col + 1).setValue(cuerpo[k]);
+      });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: !!fila }));
+  }
   if (url.pathname === '/_recalcular') {
     contexto.escribirCalculos_(true);
     res.writeHead(200, { 'Content-Type': 'application/json' });

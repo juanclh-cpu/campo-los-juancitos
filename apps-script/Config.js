@@ -26,6 +26,7 @@ var HOJA = {
   DIARIO: 'Diario de ocupación',
   RESUMEN: 'Resumen stock',
   DESCANSO: 'Descanso',
+  COEFICIENTES: 'Coeficientes',
   CONFIG: 'Configuración',
   AVISOS: 'Avisos',
   LOG: 'Log'
@@ -68,6 +69,7 @@ ESQUEMA_REF[HOJA.RESUMEN] = ['dueno', 'categoria', 'cabezas', 'potreros',
   'ultimo_evento', 'recalculado_en'];
 ESQUEMA_REF[HOJA.DESCANSO] = ['potrero', 'lote', 'hectareas', 'uso', 'ocupado',
   'cabezas_hoy', 'ultima_salida', 'dias_descanso', 'dias_ocupado'];
+ESQUEMA_REF[HOJA.COEFICIENTES] = ['categoria', 'ev'];
 ESQUEMA_REF[HOJA.CONFIG] = ['clave', 'valor', 'qué es'];
 ESQUEMA_REF[HOJA.AVISOS] = ['fecha', 'mensaje', 'activo'];
 ESQUEMA_REF[HOJA.LOG] = ['cargado_en', 'accion', 'persona', 'dispositivo',
@@ -109,7 +111,7 @@ var CARPETA_FOTOS = 'Registro Campo - Fotos';
  * La solución es poner en texto plano todas las columnas, menos las que de
  * verdad son números o fechas, que se listan acá.
  */
-var COLUMNAS_NUMERO = ['mm', 'cabezas', 'cabezas_pesadas', 'kg_cargados',
+var COLUMNAS_NUMERO = ['ev', 'mm', 'cabezas', 'cabezas_pesadas', 'kg_cargados',
   'kg_totales', 'kg_promedio', 'hectareas', 'dias', 'orden', 'recibidos',
   'guardados', 'repetidos', 'Ingreso', 'Egreso', 'Muertes', 'Stock',
   'cabezas_hoy', 'dias_descanso', 'dias_ocupado'];
@@ -236,7 +238,19 @@ var CONFIG_POR_DEFECTO = [
   ['dias_descanso_max', '45', 'En el parte, avisar los potreros con más días de descanso que esto.'],
   ['dias_ocupado_max', '7', 'En el parte, avisar los potreros ocupados hace más días que esto.'],
   ['recalcular_pedido', 'no', 'Poner "sí" para que recalcule en los próximos 5 minutos. Se vuelve solo a "no".'],
-  ['ultimo_recalculo', '', 'Cuándo se recalculó por última vez. Lo escribe el script.']
+  ['ultimo_recalculo', '', 'Cuándo se recalculó por última vez. Lo escribe el script.'],
+  ['dias_descanso_min', '20', 'Mapa: menos de estos días de descanso, el potrero va en rojo.'],
+  ['dias_descanso_listo', '35', 'Mapa: más de estos días, el potrero va en verde (listo).'],
+  ['tope_carga', '1,6', 'Mapa: EV por hectárea que no conviene pasar.']
+];
+
+/**
+ * Equivalente vaca por categoría, para la carga por hectárea del mapa.
+ * Se editan en la hoja Coeficientes. Una categoría que no esté ahí cuenta 1.
+ */
+var COEFICIENTES_INICIALES = [
+  ['Vaca parida', 1.15], ['Vaca vacía', 1], ['Vaquillona', 0.8], ['Toro', 1.3],
+  ['Novillito', 0.7], ['Ternero macho', 0.5], ['Ternera', 0.5]
 ];
 
 /**

@@ -70,7 +70,8 @@ function sembrarCatalogos() {
   volcar_(HOJA.CATEGORIAS, ESQUEMA_REF[HOJA.CATEGORIAS],
     CATEGORIAS_INICIALES.map(function (c, i) { return [c, i + 1, 'sí']; }));
 
-  enlaceActivacion_();   // crea el token si todavía no existe
+  sembrarCoeficientes_();   // ahora que están las categorías
+  enlaceActivacion_();      // crea el token si todavía no existe
   try {
     crearDisparadorDiario();
   } catch (e) {
