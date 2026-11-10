@@ -103,8 +103,18 @@ async function principal() {
   const { catalogos } = await (await fetch(
     BASE + '/api?accion=catalogos&token=' + activacion.token)).json();
 
-  const potreros = catalogos.potreros.filter(p => p.id !== 'Corral/manga');
-  const [P1, P2, P3, P4, P5, P6] = potreros.slice(21, 27).map(p => p.id);
+  // Sin el corral y sin los agrícolas: meter hacienda en un potrero de
+  // agricultura avisa y vuelve a preguntar antes de guardar, y eso se prueba
+  // aparte en prueba-mapa.mjs. Los últimos de la lista, para no pisar los que
+  // usa esa otra prueba.
+  const esAgricola = p => /agr[ií]col/i.test(p.uso || '');
+  const potreros = catalogos.potreros
+    .filter(p => p.id !== 'Corral/manga' && !esAgricola(p));
+  if (potreros.length < 6) {
+    throw new Error('la planilla tiene ' + potreros.length +
+      ' potreros sin agricultura: hacen falta 6 para esta prueba');
+  }
+  const [P1, P2, P3, P4, P5, P6] = potreros.slice(-6).map(p => p.id);
   // Si la planilla tiene las categorías de siempre las usa, y si no agarra
   // cualquiera: la prueba no depende de cómo se llamen.
   const buscarCat = (texto, porDefecto) =>

@@ -233,8 +233,10 @@ export function crearEntorno() {
   vm.createContext(contexto);
   const dir = path.resolve('apps-script');
   // En CI no está Semilla.js (tiene los datos del campo y no se publica):
-  // ahí se usa el de ejemplo, que tiene la misma forma.
-  const semilla = fs.existsSync(path.join(dir, 'Semilla.js'))
+  // ahí se usa el de ejemplo, que tiene la misma forma. Con SEMILLA=ejemplo
+  // se puede probar acá lo mismo que corre en el servidor.
+  const semilla = (process.env.SEMILLA !== 'ejemplo' &&
+    fs.existsSync(path.join(dir, 'Semilla.js')))
     ? 'Semilla.js' : 'Semilla.ejemplo.js';
   ['Config.js', 'Stock.js', 'Escritura.js', 'Avisos.js', 'Parte.js',
     'Recalculo.js', 'Mapa.js', 'Api.js', 'Menu.js', 'Instalar.js', semilla]
