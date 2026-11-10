@@ -342,6 +342,53 @@ async function principal() {
       'y antes de guardar pregunta de nuevo',
       seguro.replace(/\n+/g, ' | ').slice(0, 80));
 
+    titulo('6. Si queda hacienda en agricultura, el mapa lo canta');
+    await tocar(pagina, 'SÍ, GUARDAR IGUAL');
+    await pagina.waitForFunction(() => ESTADO.pendientes === 0 && !ESTADO.enviando,
+      { timeout: 30000 });
+    await dormir(600);
+    // Después de mover pasa por "Cómo quedó": hay que cerrarla antes de volver.
+    if (/Cómo quedó/.test(await pagina.evaluate(() => document.body.innerText))) {
+      await tocar(pagina, 'LISTO');
+    }
+    await pagina.evaluate(() => alInicio());
+    await pagina.waitForFunction(() => [...document.querySelectorAll('button')]
+      .some(b => /MAPA/.test(b.textContent)), { timeout: 15000 });
+    await tocar(pagina, 'MAPA DEL CAMPO', 'incluye');
+    await pagina.waitForFunction(() => document.querySelectorAll('polygon').length > 3,
+      { timeout: 20000 });
+    await dormir(800);
+    const conAviso = await pagina.evaluate(() => document.body.innerText);
+    ok(new RegExp('hacienda en potreros de agricultura').test(conAviso) &&
+      conAviso.indexOf(AGRICOLA.id) >= 0,
+      'abajo del plano avisa qué potrero de agricultura tiene hacienda',
+      (conAviso.match(/Hay hacienda[^\n]*/) || ['—'])[0]);
+    await pagina.screenshot({ path: CAPTURAS + '/25-hacienda-en-agricola.png' });
+
+    titulo('7. La hacienda que el plano no dibuja');
+    const avisos = await pagina.evaluate(id => {
+      const d = {stock: [
+        {potrero: 'zz-sin-dibujo', cabezas: 7},
+        {potrero: id, cabezas: 11}
+      ]};
+      const ix = {potreros: {}, stock: {}};
+      ix.potreros['zz-sin-dibujo'] = {id: 'zz-sin-dibujo', uso: 'Pastura'};
+      ix.potreros[id] = {id: id, uso: 'Agrícola'};
+      d.stock.forEach(s => {
+        ix.stock[s.potrero] = (ix.stock[s.potrero] || []).concat([s]);
+      });
+      return {
+        sinDibujo: conHaciendaSinDibujo(d, ix),
+        enAgricola: haciendaEnAgricola(d, ix)
+      };
+    }, AGRICOLA.id);
+    ok(avisos.sinDibujo.join(',') === 'zz-sin-dibujo',
+      'un potrero con hacienda que el plano no dibuja sale en la lista',
+      avisos.sinDibujo.join(', ') || 'ninguno');
+    ok(avisos.enAgricola.length === 1 && avisos.enAgricola[0].cabezas === 11,
+      'y la hacienda en agricultura se cuenta aparte',
+      JSON.stringify(avisos.enAgricola));
+
   } finally {
     await navegador.close();
     servidor.kill();

@@ -7,7 +7,7 @@
 
    VERSION hay que subirla en cada cambio: eso es lo que hace que el navegador
    se dé cuenta de que este archivo cambió y tire la copia vieja. */
-var VERSION = 'v11';
+var VERSION = 'v12';
 var CACHE = 'campo-' + VERSION;
 var ARCHIVOS = [
   './', 'index.html', 'estilos.css', 'app.js', 'manifest.webmanifest',
@@ -32,6 +32,9 @@ self.addEventListener('fetch', function (e) {
   var url = new URL(e.request.url);
   // Todo lo que va a Google (la planilla) pasa derecho a la red.
   if (url.hostname.indexOf('google') >= 0) return;
+  // Y los pedidos a la planilla, vengan de donde vengan: guardar una
+  // respuesta vieja del stock o del mapa sería peor que no tener nada.
+  if (url.pathname.indexOf('/api') >= 0) return;
   if (e.request.method !== 'GET') return;
   if (url.origin !== location.origin) return;
 

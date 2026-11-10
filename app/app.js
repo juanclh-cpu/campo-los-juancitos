@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v11';
+var VERSION = 'v12';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';
@@ -1998,6 +1998,36 @@ function armarIndice(datos) {
   return ix;
 }
 
+/**
+ * Potreros con hacienda que el plano no dibuja (están en la lista pero no
+ * tienen polígono). Sin este aviso esa hacienda desaparece del mapa.
+ */
+function conHaciendaSinDibujo(d, ix, geo) {
+  var plano = geo || GEO;
+  if (!plano) return [];
+  var dibujados = {};
+  (plano.potreros || []).forEach(function (g) { dibujados[g.id] = true; });
+  var fuera = [];
+  (d.stock || []).forEach(function (s) {
+    if (!dibujados[s.potrero] && ix.potreros[s.potrero] &&
+        fuera.indexOf(s.potrero) < 0) fuera.push(s.potrero);
+  });
+  return fuera.sort();
+}
+
+/** Hacienda metida en un potrero de agricultura: hay que sacarla de ahí. */
+function haciendaEnAgricola(d, ix) {
+  var salida = [];
+  Object.keys(ix.stock || {}).forEach(function (id) {
+    var p = ix.potreros[id];
+    if (!p || p.uso !== 'Agrícola') return;
+    var cabezas = ix.stock[id].reduce(function (a, g) { return a + g.cabezas; }, 0);
+    if (cabezas > 0) salida.push({id: id, cabezas: cabezas});
+  });
+  salida.sort(function (a, b) { return b.cabezas - a.cabezas; });
+  return salida;
+}
+
 /** Qué tipo de dibujo le toca a cada polígono del plano. */
 function claseDePotrero(geo, ix) {
   var p = ix.potreros[geo.id];
@@ -2045,9 +2075,22 @@ PANTALLAS.mapa = function (datos) {
     cont.appendChild(dibujarMapa(d, ix, modo));
     cont.appendChild(leyendaDe(modo, d, ix));
 
-    if (d.fuera_de_lista && d.fuera_de_lista.length) {
+    var sinDibujo = conHaciendaSinDibujo(d, ix);
+    if (sinDibujo.length) {
       cont.appendChild(el('p', 'pie', 'Con hacienda pero sin dibujo en el plano: ' +
+        sinDibujo.join(', ') + '.'));
+    }
+    if (d.fuera_de_lista && d.fuera_de_lista.length) {
+      cont.appendChild(el('p', 'pie',
+        'Con hacienda pero sin figurar en la lista de potreros: ' +
         d.fuera_de_lista.join(', ') + '.'));
+    }
+    var enAgricola = haciendaEnAgricola(d, ix);
+    if (enAgricola.length) {
+      cont.appendChild(el('p', 'aviso-agricola',
+        'Hay hacienda en potreros de agricultura: ' +
+        enAgricola.map(function (a) { return a.id + ' (' + a.cabezas + ')'; })
+          .join(', ') + '.'));
     }
   }
 
@@ -2224,8 +2267,12 @@ function dibujarPotrero(NS, lienzo, geo, clase, d, ix, modo) {
     t3.setAttribute('y', centro[1] + tam * 1.2);
     t3.setAttribute('font-size', Math.min(tam * 0.5, 15));
     t3.setAttribute('class', 'etiqueta-chica');
-    t3.setAttribute('fill', '#5f6368');
-    t3.textContent = 'Agricultura: no entrar';
+    // Si hay hacienda adentro, el cartel no puede decir sólo "no entrar":
+    // lo importante es que hay animales donde no tendría que haber.
+    t3.setAttribute('fill', cabezas > 0 ? '#c62828' : '#5f6368');
+    t3.textContent = cabezas > 0
+      ? cabezas + ' cab. en agricultura'
+      : 'Agricultura: no entrar';
     lienzo.appendChild(t3);
     var quien = p && p.quien_lo_usa;
     if (quien && caja.alto > 80) {
