@@ -4,6 +4,7 @@ apps-script/Semilla.js
 
 # Capturas y guía: salen del campo de verdad, así que quedan afuera del repo.
 docs/capturas/
+docs/capturas-reales/
 docs/guia-nahuel.*
 
 # clasp y credenciales

@@ -10,7 +10,7 @@
 
 /* Subir esto y VERSION en sw.js juntos en cada cambio. Se ve abajo de la
    pantalla principal, para saber de un vistazo qué versión tiene el teléfono. */
-var VERSION = 'v9';
+var VERSION = 'v10';
 
 var ENTRADA_CAMPO = 'Entrada al campo';
 var SALIDA_CAMPO = 'Salida del campo';

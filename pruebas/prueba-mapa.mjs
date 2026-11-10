@@ -249,6 +249,16 @@ async function principal() {
     const leyenda = await pagina.evaluate(() => document.body.innerText);
     ok(leyenda.indexOf(D1) >= 0 && leyenda.indexOf(D2) >= 0,
       'en Clientes la leyenda nombra a los dueños');
+    // El cuadradito de cada dueño es un span: con fill solo (que es de SVG)
+    // quedaba invisible y la leyenda no servía para leer el plano.
+    const cuadros = await pagina.evaluate(() =>
+      [...document.querySelectorAll('.leyenda .cuadro')]
+        .map(c => getComputedStyle(c).backgroundColor));
+    const sinColor = cuadros.filter(c =>
+      !c || c === 'transparent' || /rgba\(0, 0, 0, 0\)/.test(c));
+    ok(cuadros.length > 1 && sinColor.length === 0,
+      'y cada dueño tiene su color a la vista',
+      cuadros.length + ' cuadros, ' + sinColor.length + ' sin color');
 
     titulo('4. La ficha del potrero');
     await tocar(pagina, 'Descanso');

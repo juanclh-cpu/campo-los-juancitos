@@ -340,14 +340,16 @@ textarea, input[type="text"], input[type="date"] {
 .p-azul { fill: #1e88e5; }
 .p-gris { fill: #cfd3cd; }
 .p-sindatos { fill: #eceff1; }
-.p-cliente-0 { fill: #1b5e20; }
-.p-cliente-1 { fill: #1565c0; }
-.p-cliente-2 { fill: #ef6c00; }
-.p-cliente-3 { fill: #6a1b9a; }
-.p-cliente-4 { fill: #00838f; }
-.p-cliente-5 { fill: #c62828; }
-.p-cliente-6 { fill: #558b2f; }
-.p-cliente-7 { fill: #4e342e; }
+/* El mismo color sirve para el potrero en el plano (fill, que es de SVG) y
+   para el cuadradito de la leyenda, que es un span (background). */
+.p-cliente-0 { fill: #1b5e20; background: #1b5e20; }
+.p-cliente-1 { fill: #1565c0; background: #1565c0; }
+.p-cliente-2 { fill: #ef6c00; background: #ef6c00; }
+.p-cliente-3 { fill: #6a1b9a; background: #6a1b9a; }
+.p-cliente-4 { fill: #00838f; background: #00838f; }
+.p-cliente-5 { fill: #c62828; background: #c62828; }
+.p-cliente-6 { fill: #558b2f; background: #558b2f; }
+.p-cliente-7 { fill: #4e342e; background: #4e342e; }
 .potrero { stroke: #ffffff; stroke-width: 1.6; cursor: pointer; }
 .potrero.ocupado-de-mas { stroke: #b71c1c; stroke-width: 4; }
 .etiqueta { fill: #111; font-weight: 800; pointer-events: none; text-anchor: middle; }
