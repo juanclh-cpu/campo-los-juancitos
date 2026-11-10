@@ -1935,7 +1935,7 @@ PANTALLAS.problemas = function () {
 // ===========================================================================
 
 var GEO = null;                 // el plano: polígonos y linderos
-var COLORES_CLIENTE = 8;        // cuántos colores distintos para los dueños
+var COLORES_CLIENTE = 12;       // cuántos colores distintos para los dueños
 var CARGA_AMARILLA = 0.7;       // a partir de este porcentaje del tope, amarillo
 
 /** Baja el plano una sola vez. Queda cacheado por el service worker. */

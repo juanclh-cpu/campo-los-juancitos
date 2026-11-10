@@ -350,6 +350,10 @@ textarea, input[type="text"], input[type="date"] {
 .p-cliente-5 { fill: #c62828; background: #c62828; }
 .p-cliente-6 { fill: #558b2f; background: #558b2f; }
 .p-cliente-7 { fill: #4e342e; background: #4e342e; }
+.p-cliente-8 { fill: #ad1457; background: #ad1457; }
+.p-cliente-9 { fill: #37474f; background: #37474f; }
+.p-cliente-10 { fill: #827717; background: #827717; }
+.p-cliente-11 { fill: #283593; background: #283593; }
 .potrero { stroke: #ffffff; stroke-width: 1.6; cursor: pointer; }
 .potrero.ocupado-de-mas { stroke: #b71c1c; stroke-width: 4; }
 .etiqueta { fill: #111; font-weight: 800; pointer-events: none; text-anchor: middle; }

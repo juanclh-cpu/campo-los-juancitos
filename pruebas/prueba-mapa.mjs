@@ -43,7 +43,26 @@ async function tocar(pagina, texto, modo = 'exacto') {
   await dormir(200);
 }
 
+/**
+ * Si alguien sube COLORES_CLIENTE y se olvida de agregar las clases en el
+ * CSS, los últimos dueños quedan sin color y el plano no se puede leer.
+ */
+function revisarColoresDeCliente() {
+  const js = fs.readFileSync('app/app.js', 'utf8');
+  const css = fs.readFileSync('app/estilos.css', 'utf8');
+  const cuantos = Number((js.match(/COLORES_CLIENTE = (\d+)/) || [])[1]);
+  const clases = new Set((css.match(/\.p-cliente-\d+/g) || []));
+  const faltan = [];
+  for (let i = 0; i < cuantos; i++) {
+    if (!clases.has('.p-cliente-' + i)) faltan.push(i);
+  }
+  ok(cuantos > 0 && faltan.length === 0,
+    'cada color de cliente tiene su clase en el CSS',
+    cuantos + ' colores, faltan: ' + (faltan.join(', ') || 'ninguno'));
+}
+
 async function principal() {
+  revisarColoresDeCliente();
   fs.mkdirSync(CAPTURAS, { recursive: true });
   const servidor = spawn(process.execPath, ['pruebas/servidor.mjs', String(PUERTO)],
     { stdio: ['ignore', 'pipe', 'inherit'] });
